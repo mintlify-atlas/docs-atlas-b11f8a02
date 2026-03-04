@@ -1,0 +1,147 @@
+{
+  "projectType": "api-service",
+  "projectName": "ExpireEye Backend",
+  "projectDescription": "A FastAPI backend service for food expiry tracking with AI-powered object detection and barcode scanning.",
+  "theme": "palm",
+  "primaryColor": "#10b981",
+  "lightColor": "#34d399",
+  "darkColor": "#059669",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/authentication",
+              "concepts/database"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/product-tracking",
+              "features/expiry-detection",
+              "features/barcode-scanning",
+              "features/ai-detection",
+              "features/notifications"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/auth/login",
+              "api/auth/signup"
+            ]
+          },
+          {
+            "group": "Product Inventory",
+            "pages": [
+              "api/products/add",
+              "api/products/list",
+              "api/products/update",
+              "api/products/delete",
+              "api/products/barcodes"
+            ]
+          },
+          {
+            "group": "User Inventory",
+            "pages": [
+              "api/user-inventory/add",
+              "api/user-inventory/list",
+              "api/user-inventory/update",
+              "api/user-inventory/delete"
+            ]
+          },
+          {
+            "group": "Detection & Scanning",
+            "pages": [
+              "api/detection/yolo",
+              "api/detection/qr-code"
+            ]
+          },
+          {
+            "group": "Notifications",
+            "pages": [
+              "api/notifications/websocket",
+              "api/notifications/list"
+            ]
+          },
+          {
+            "group": "User & Statistics",
+            "pages": [
+              "api/user/profile",
+              "api/stats/overview"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Setup & Configuration",
+            "pages": [
+              "guides/environment-setup",
+              "guides/database-migrations",
+              "guides/deployment"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "guides/local-development",
+              "guides/testing",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JWT-based authentication with secure token management",
+    "Product inventory management with CRUD operations",
+    "User-specific product tracking with expiry dates",
+    "YOLO-based AI object detection for food items",
+    "Barcode and QR code scanning capabilities",
+    "Real-time WebSocket notifications for expiry alerts",
+    "Automated background tasks for expiry checking",
+    "Nutrition information tracking and management",
+    "Usage statistics and analytics endpoints"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth/login",
+    "POST /api/auth/signup",
+    "POST /api/product/inventory/add",
+    "GET /api/product/inventory/list",
+    "PUT /api/product/inventory/update/{product_id}",
+    "DELETE /api/product/inventory/delete/{product_id}",
+    "GET /api/product/barcodes",
+    "POST /api/product/user/add",
+    "GET /api/product/user/list",
+    "PUT /api/product/user/update/{product_id}",
+    "DELETE /api/product/user/delete/{product_id}",
+    "POST /api/yolo/detect",
+    "POST /api/qr",
+    "WS /api/ws/notification",
+    "GET /api/notification/list",
+    "GET /api/user/profile",
+    "GET /api/stats/overview"
+  ]
+}
