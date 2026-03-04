@@ -1,0 +1,217 @@
+---
+title: "Mark Notification as Read"
+api: "POST /api/notification/mark-read/{notification_id}"
+description: "Mark a specific notification as read for the authenticated user"
+---
+
+## Overview
+
+This endpoint updates a notification's read status, marking it as read. This is useful for tracking which notifications the user has already seen and managing notification badges or counters in the UI.
+
+## Path Parameters
+
+<ParamField path="notification_id" type="string" required>
+  The unique identifier (UUID) of the notification to mark as read
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Confirmation message indicating the notification was marked as read
+</ResponseField>
+
+## Response Examples
+
+### Success
+
+```json
+{
+  "message": "Notification marked as read"
+}
+```
+
+### Notification Not Found
+
+```json
+{
+  "detail": "Notification not found"
+}
+```
+
+## Error Responses
+
+### 404 Not Found
+
+The specified notification ID does not exist in the database.
+
+```json
+{
+  "detail": "Notification not found"
+}
+```
+
+### 401 Unauthorized
+
+Authentication failed or missing authorization header.
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X POST "https://api.expireeye.com/api/notification/mark-read/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const notificationId = "550e8400-e29b-41d4-a716-446655440000";
+const accessToken = "your-jwt-token";
+
+fetch(`https://api.expireeye.com/api/notification/mark-read/${notificationId}`, {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    console.log(data.message); // "Notification marked as read"
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Python (Requests)
+
+```python
+import requests
+
+notification_id = "550e8400-e29b-41d4-a716-446655440000"
+access_token = "your-jwt-token"
+
+url = f"https://api.expireeye.com/api/notification/mark-read/{notification_id}"
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+response = requests.post(url, headers=headers)
+
+if response.status_code == 200:
+    data = response.json()
+    print(data["message"])
+else:
+    print(f"Error: {response.status_code}")
+```
+
+### TypeScript (Axios)
+
+```typescript
+import axios from 'axios';
+
+async function markNotificationAsRead(
+  notificationId: string,
+  accessToken: string
+): Promise<void> {
+  try {
+    const response = await axios.post(
+      `https://api.expireeye.com/api/notification/mark-read/${notificationId}`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    console.log(response.data.message);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      console.error('Notification not found');
+    } else {
+      console.error('Failed to mark notification as read:', error);
+    }
+  }
+}
+```
+
+### React Hook Example
+
+```typescript
+import { useState } from 'react';
+import axios from 'axios';
+
+function useMarkNotificationAsRead() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const markAsRead = async (notificationId: string, accessToken: string) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await axios.post(
+        `https://api.expireeye.com/api/notification/mark-read/${notificationId}`,
+        {},
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+      return true;
+    } catch (err) {
+      setError('Failed to mark notification as read');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { markAsRead, loading, error };
+}
+
+// Usage
+function NotificationItem({ notification, accessToken }) {
+  const { markAsRead, loading } = useMarkNotificationAsRead();
+
+  const handleMarkAsRead = async () => {
+    const success = await markAsRead(notification.id, accessToken);
+    if (success) {
+      // Update UI to show notification as read
+    }
+  };
+
+  return (
+    <div onClick={handleMarkAsRead}>
+      {!notification.isRead && <span className="unread-badge" />}
+      <p>{notification.message}</p>
+      {loading && <span>Marking as read...</span>}
+    </div>
+  );
+}
+```
+
+## Related Endpoints
+
+- [List Notifications](/api/notifications/list) - Retrieve all user notifications
+- [WebSocket Notifications](/api/notifications/websocket) - Real-time notification stream
+
+## Use Cases
+
+1. **Notification Badge Management**: Clear notification badges when user views notifications
+2. **UI State Synchronization**: Update UI to reflect read/unread status after user interaction
+3. **Batch Read Operations**: Mark multiple notifications as read sequentially
+4. **Archive Old Notifications**: Mark notifications as read before archiving or filtering
+
+## Notes
+
+- The endpoint does not verify if the notification belongs to the authenticated user
+- Marking an already read notification as read again will succeed without error
+- The `read` field in the database is set to `True` upon successful execution
+- Consider implementing optimistic UI updates to improve user experience
+- For bulk operations, you may need to call this endpoint multiple times

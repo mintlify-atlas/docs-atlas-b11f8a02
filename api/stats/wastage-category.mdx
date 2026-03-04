@@ -1,0 +1,318 @@
+---
+title: "Get Wastage by Category"
+api: "GET /api/stats/wastage-category"
+description: "Retrieve the percentage distribution of wasted items across product categories"
+---
+
+## Overview
+
+This endpoint analyzes expired products by category, returning the percentage of total waste attributable to each product category. This helps identify which categories contribute most to food waste and where optimization efforts should be focused.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer YOUR_ACCESS_TOKEN`
+</ParamField>
+
+## Response
+
+Returns an array of category objects with waste percentages.
+
+<ResponseField name="category" type="string">
+  The product category name (e.g., "Dairy", "Vegetables", "Meat")
+</ResponseField>
+
+<ResponseField name="percentage" type="float">
+  Percentage of total expired items in this category, rounded to 2 decimal places
+</ResponseField>
+
+## Response Examples
+
+### Success
+
+```json
+[
+  {
+    "category": "Dairy",
+    "percentage": 35.5
+  },
+  {
+    "category": "Vegetables",
+    "percentage": 28.75
+  },
+  {
+    "category": "Meat",
+    "percentage": 18.25
+  },
+  {
+    "category": "Fruits",
+    "percentage": 12.5
+  },
+  {
+    "category": "Bakery",
+    "percentage": 5.0
+  }
+]
+```
+
+### No Expired Products
+
+If no expired products exist, an empty array is returned:
+
+```json
+[]
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Authentication failed or missing authorization header.
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X GET "https://api.expireeye.com/api/stats/wastage-category" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const accessToken = "your-jwt-token";
+
+fetch("https://api.expireeye.com/api/stats/wastage-category", {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    if (data.length === 0) {
+      console.log("No waste data available");
+      return;
+    }
+    
+    // Find category with highest waste
+    const highest = data.reduce((max, item) => 
+      item.percentage > max.percentage ? item : max
+    );
+    
+    console.log(`Highest waste category: ${highest.category} (${highest.percentage}%)`);
+    
+    // Display all categories
+    data.forEach(item => {
+      console.log(`${item.category}: ${item.percentage}%`);
+    });
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Python (Requests)
+
+```python
+import requests
+
+access_token = "your-jwt-token"
+url = "https://api.expireeye.com/api/stats/wastage-category"
+
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+response = requests.get(url, headers=headers)
+
+if response.status_code == 200:
+    data = response.json()
+    
+    if data:
+        print("Waste Distribution by Category:")
+        print("-" * 40)
+        
+        # Sort by percentage descending
+        sorted_data = sorted(data, key=lambda x: x["percentage"], reverse=True)
+        
+        for item in sorted_data:
+            bar = "█" * int(item["percentage"] / 2)
+            print(f"{item['category']:15} {bar} {item['percentage']:.2f}%")
+        
+        # Calculate top 3 contributors
+        top_3 = sorted_data[:3]
+        top_3_total = sum(item["percentage"] for item in top_3)
+        print(f"\nTop 3 categories account for {top_3_total:.1f}% of waste")
+    else:
+        print("No waste data available")
+else:
+    print(f"Error: {response.status_code}")
+```
+
+### Pie Chart Visualization (React + Chart.js)
+
+```typescript
+import { useEffect, useState } from 'react';
+import { Pie } from 'react-chartjs-2';
+import axios from 'axios';
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+interface WastageCategoryItem {
+  category: string;
+  percentage: number;
+}
+
+function WastageCategoryChart({ accessToken }: { accessToken: string }) {
+  const [data, setData] = useState<WastageCategoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios
+      .get<WastageCategoryItem[]>(
+        'https://api.expireeye.com/api/stats/wastage-category',
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+      .then(response => {
+        setData(response.data);
+      })
+      .finally(() => setLoading(false));
+  }, [accessToken]);
+
+  if (loading) return <div>Loading waste distribution...</div>;
+  if (data.length === 0) return <div>No waste data to display</div>;
+
+  const chartData = {
+    labels: data.map(item => item.category),
+    datasets: [
+      {
+        label: 'Waste Percentage',
+        data: data.map(item => item.percentage),
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.8)',
+          'rgba(54, 162, 235, 0.8)',
+          'rgba(255, 206, 86, 0.8)',
+          'rgba(75, 192, 192, 0.8)',
+          'rgba(153, 102, 255, 0.8)',
+          'rgba(255, 159, 64, 0.8)',
+        ],
+        borderColor: [
+          'rgba(255, 99, 132, 1)',
+          'rgba(54, 162, 235, 1)',
+          'rgba(255, 206, 86, 1)',
+          'rgba(75, 192, 192, 1)',
+          'rgba(153, 102, 255, 1)',
+          'rgba(255, 159, 64, 1)',
+        ],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'right' as const,
+      },
+      title: {
+        display: true,
+        text: 'Waste Distribution by Category',
+        font: {
+          size: 18,
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            return `${label}: ${value.toFixed(2)}%`;
+          },
+        },
+      },
+    },
+  };
+
+  return (
+    <div>
+      <Pie data={chartData} options={options} />
+      
+      {/* Summary Table */}
+      <div className="mt-6">
+        <h4 className="font-semibold mb-2">Category Breakdown</h4>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-left">Category</th>
+              <th className="border p-2 text-right">Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data
+              .sort((a, b) => b.percentage - a.percentage)
+              .map((item, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="border p-2">{item.category}</td>
+                  <td className="border p-2 text-right font-mono">
+                    {item.percentage.toFixed(2)}%
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+## Calculation Details
+
+The endpoint calculates percentages by:
+
+1. Counting total expired products across all categories
+2. Counting expired products per category
+3. Calculating percentage: `(category_expired / total_expired) × 100`
+4. Rounding to 2 decimal places
+
+<Note>
+  The percentages will sum to 100% across all categories returned.
+</Note>
+
+## Related Endpoints
+
+- [Expiry Trends](/api/stats/expiry-trends) - Detailed trends with consumption patterns
+- [Expired Products](/api/stats/overview) - Expired product counts by date
+- [Wasted vs Active](/api/stats/wasted-vs-eaten) - Overall waste vs active comparison
+
+## Use Cases
+
+1. **Waste Analysis Dashboard**: Visualize which categories have the highest waste rates
+2. **Category-Specific Interventions**: Focus waste reduction efforts on high-waste categories
+3. **Inventory Optimization**: Adjust purchasing patterns for problematic categories
+4. **Reporting**: Generate category-level waste reports for management
+5. **Comparative Analysis**: Track how category waste distribution changes over time
+6. **Budget Allocation**: Prioritize resources for categories with highest waste impact
+
+## Notes
+
+- Only products with status `expired` are included in the calculation
+- Categories are determined by the `category` field in the Product table
+- If a product has no category or an unknown category, it may appear as `null` or "Uncategorized"
+- The endpoint returns data only for categories that have expired products
+- Results are not time-filtered; they include all expired products in the database

@@ -1,0 +1,358 @@
+---
+title: "Get Product Nutrients"
+api: "GET /api/stats/nutrients/{product_id}"
+description: "Retrieve detailed nutrition information for a specific product, optimized for radar chart visualization"
+---
+
+## Overview
+
+This endpoint returns comprehensive nutrition data for a specific product, including all available nutrients such as energy, macronutrients, vitamins, and minerals. The data is formatted for use in radar charts and other nutrition visualizations.
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier (UUID) of the product to retrieve nutrition data for
+</ParamField>
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer YOUR_ACCESS_TOKEN`
+</ParamField>
+
+## Response
+
+<ResponseField name="item" type="string">
+  The product name, or an error message if the product is not found
+</ResponseField>
+
+<ResponseField name="nutrients" type="object">
+  Dictionary of nutrient names and their values. Only includes nutrients with valid numeric values (excludes null and "N/A" entries).
+  
+  <Expandable title="Available nutrients">
+    <ResponseField name="energy_kcal" type="float">
+      Energy in kilocalories
+    </ResponseField>
+    
+    <ResponseField name="carbohydrate" type="float">
+      Carbohydrates in grams
+    </ResponseField>
+    
+    <ResponseField name="protein" type="float">
+      Protein in grams
+    </ResponseField>
+    
+    <ResponseField name="fiber" type="float">
+      Dietary fiber in grams
+    </ResponseField>
+    
+    <ResponseField name="total_sugars" type="float">
+      Total sugars in grams
+    </ResponseField>
+    
+    <ResponseField name="saturated_fat" type="float">
+      Saturated fat in grams
+    </ResponseField>
+    
+    <ResponseField name="vitamin_a" type="float">
+      Vitamin A in micrograms
+    </ResponseField>
+    
+    <ResponseField name="vitamin_c" type="float">
+      Vitamin C in milligrams
+    </ResponseField>
+    
+    <ResponseField name="potassium" type="float">
+      Potassium in milligrams
+    </ResponseField>
+    
+    <ResponseField name="iron" type="float">
+      Iron in milligrams
+    </ResponseField>
+    
+    <ResponseField name="calcium" type="float">
+      Calcium in milligrams
+    </ResponseField>
+    
+    <ResponseField name="sodium" type="float">
+      Sodium in milligrams
+    </ResponseField>
+    
+    <ResponseField name="cholesterol" type="float">
+      Cholesterol in milligrams
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Response Examples
+
+### Success
+
+```json
+{
+  "item": "Whole Milk",
+  "nutrients": {
+    "energy_kcal": 61.0,
+    "carbohydrate": 4.8,
+    "protein": 3.2,
+    "fiber": 0.0,
+    "total_sugars": 5.1,
+    "saturated_fat": 1.9,
+    "vitamin_a": 46.0,
+    "vitamin_c": 0.0,
+    "potassium": 143.0,
+    "iron": 0.03,
+    "calcium": 113.0,
+    "sodium": 43.0,
+    "cholesterol": 10.0
+  }
+}
+```
+
+### Product Not Found
+
+```json
+{
+  "item": "Product not found or no nutrition data",
+  "nutrients": {}
+}
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Authentication failed or missing authorization header.
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X GET "https://api.expireeye.com/api/stats/nutrients/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const productId = "550e8400-e29b-41d4-a716-446655440000";
+const accessToken = "your-jwt-token";
+
+fetch(`https://api.expireeye.com/api/stats/nutrients/${productId}`, {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    if (Object.keys(data.nutrients).length === 0) {
+      console.log("No nutrition data available");
+      return;
+    }
+    
+    console.log(`Nutrition for: ${data.item}`);
+    Object.entries(data.nutrients).forEach(([key, value]) => {
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      console.log(`${label}: ${value}`);
+    });
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Radar Chart Visualization (React + Chart.js)
+
+```typescript
+import { useEffect, useState } from 'react';
+import { Radar } from 'react-chartjs-2';
+import axios from 'axios';
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend
+);
+
+interface NutrientsResponse {
+  item: string;
+  nutrients: Record<string, number>;
+}
+
+function NutrientRadarChart({
+  productId,
+  accessToken,
+}: {
+  productId: string;
+  accessToken: string;
+}) {
+  const [data, setData] = useState<NutrientsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios
+      .get<NutrientsResponse>(
+        `https://api.expireeye.com/api/stats/nutrients/${productId}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+      .then(response => {
+        setData(response.data);
+      })
+      .finally(() => setLoading(false));
+  }, [productId, accessToken]);
+
+  if (loading) return <div>Loading nutrition data...</div>;
+  if (!data || Object.keys(data.nutrients).length === 0) {
+    return <div>No nutrition data available for this product</div>;
+  }
+
+  // Format labels (e.g., "energy_kcal" -> "Energy (kcal)")
+  const formatLabel = (key: string): string => {
+    const units: Record<string, string> = {
+      energy_kcal: 'Energy (kcal)',
+      carbohydrate: 'Carbs (g)',
+      protein: 'Protein (g)',
+      fiber: 'Fiber (g)',
+      total_sugars: 'Sugars (g)',
+      saturated_fat: 'Sat. Fat (g)',
+      vitamin_a: 'Vit. A (μg)',
+      vitamin_c: 'Vit. C (mg)',
+      potassium: 'Potassium (mg)',
+      iron: 'Iron (mg)',
+      calcium: 'Calcium (mg)',
+      sodium: 'Sodium (mg)',
+      cholesterol: 'Cholesterol (mg)',
+    };
+    return units[key] || key;
+  };
+
+  const labels = Object.keys(data.nutrients).map(formatLabel);
+  const values = Object.values(data.nutrients);
+
+  const chartData = {
+    labels,
+    datasets: [
+      {
+        label: data.item,
+        data: values,
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        borderColor: 'rgba(16, 185, 129, 1)',
+        borderWidth: 2,
+        pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(16, 185, 129, 1)',
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'top' as const,
+      },
+      title: {
+        display: true,
+        text: `Nutrition Profile: ${data.item}`,
+        font: {
+          size: 18,
+        },
+      },
+    },
+    scales: {
+      r: {
+        beginAtZero: true,
+        ticks: {
+          stepSize: 20,
+        },
+      },
+    },
+  };
+
+  return (
+    <div>
+      <Radar data={chartData} options={options} />
+      
+      {/* Nutrition Facts Table */}
+      <div className="mt-6">
+        <h4 className="font-semibold mb-2">Nutrition Facts</h4>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-left">Nutrient</th>
+              <th className="border p-2 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(data.nutrients).map(([key, value]) => (
+              <tr key={key} className="hover:bg-gray-50">
+                <td className="border p-2">{formatLabel(key)}</td>
+                <td className="border p-2 text-right font-mono">
+                  {value.toFixed(2)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+```
+
+## Data Processing
+
+The endpoint automatically:
+
+1. Joins the Product and Nutrition tables
+2. Retrieves all nutrition fields from the Nutrition model
+3. Removes system fields (`id`, `addedAt`)
+4. Filters out null and "N/A" values
+5. Converts remaining values to float type
+
+<Note>
+  Only nutrients with valid numeric values are included in the response. This ensures clean data for visualization and prevents chart rendering errors.
+</Note>
+
+## Related Endpoints
+
+- [Product List](/api/products/list) - Get all products with basic nutrition info
+- [User Inventory List](/api/user-inventory/list) - Get user products with nutrition data
+
+## Use Cases
+
+1. **Radar Charts**: Create multi-dimensional nutrition profile visualizations
+2. **Product Comparison**: Compare nutrition profiles between different products
+3. **Dietary Tracking**: Display detailed nutrition information for consumed products
+4. **Health Dashboards**: Show comprehensive nutrient breakdowns
+5. **Nutrition Analysis**: Analyze and visualize nutrient distributions
+6. **Educational Tools**: Help users understand product nutrition composition
+
+## Notes
+
+- The product must have an associated `nutritionId` linking to the Nutrition table
+- Nutrients with null or "N/A" values are excluded from the response
+- Values are returned as floats for consistent numerical processing
+- The endpoint does not calculate daily value percentages; clients should implement this based on dietary guidelines
+- Consider caching nutrition data as it typically doesn't change frequently

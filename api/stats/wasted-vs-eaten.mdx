@@ -1,0 +1,302 @@
+---
+title: "Get Wasted vs Active Products"
+api: "GET /api/stats/wasted-vs-eaten"
+description: "Compare the count of wasted (expired) products against active products"
+---
+
+## Overview
+
+This endpoint provides a simple comparison between the number of wasted (expired) products and active products in the user's inventory. This is useful for creating comparison visualizations like pie charts or bar charts to show the overall waste ratio.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer YOUR_ACCESS_TOKEN`
+</ParamField>
+
+## Response
+
+Returns an array with exactly two items representing wasted and active product counts.
+
+<ResponseField name="status" type="string">
+  Status type: either `"wasted"` or `"active"`
+</ResponseField>
+
+<ResponseField name="count" type="integer">
+  Number of products with this status
+</ResponseField>
+
+## Response Examples
+
+### Success
+
+```json
+[
+  {
+    "status": "wasted",
+    "count": 45
+  },
+  {
+    "status": "active",
+    "count": 128
+  }
+]
+```
+
+### No Products
+
+Even if no products exist, the endpoint returns both categories with zero counts:
+
+```json
+[
+  {
+    "status": "wasted",
+    "count": 0
+  },
+  {
+    "status": "active",
+    "count": 0
+  }
+]
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Authentication failed or missing authorization header.
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X GET "https://api.expireeye.com/api/stats/wasted-vs-eaten" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const accessToken = "your-jwt-token";
+
+fetch("https://api.expireeye.com/api/stats/wasted-vs-eaten", {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    const wasted = data.find(item => item.status === "wasted")?.count || 0;
+    const active = data.find(item => item.status === "active")?.count || 0;
+    const total = wasted + active;
+    
+    if (total > 0) {
+      const wasteRate = (wasted / total * 100).toFixed(1);
+      console.log(`Waste rate: ${wasteRate}%`);
+      console.log(`Wasted: ${wasted}, Active: ${active}`);
+    } else {
+      console.log("No products in inventory");
+    }
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Python (Requests)
+
+```python
+import requests
+
+access_token = "your-jwt-token"
+url = "https://api.expireeye.com/api/stats/wasted-vs-eaten"
+
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+response = requests.get(url, headers=headers)
+
+if response.status_code == 200:
+    data = response.json()
+    
+    wasted = next((item["count"] for item in data if item["status"] == "wasted"), 0)
+    active = next((item["count"] for item in data if item["status"] == "active"), 0)
+    total = wasted + active
+    
+    if total > 0:
+        waste_rate = (wasted / total) * 100
+        print(f"Total products: {total}")
+        print(f"Wasted: {wasted} ({waste_rate:.1f}%)")
+        print(f"Active: {active} ({100 - waste_rate:.1f}%)")
+        
+        # Visualize with simple bar
+        wasted_bar = "█" * int(wasted / total * 50)
+        active_bar = "█" * int(active / total * 50)
+        print(f"\nWasted: {wasted_bar}")
+        print(f"Active: {active_bar}")
+    else:
+        print("No products found")
+else:
+    print(f"Error: {response.status_code}")
+```
+
+### Pie Chart Visualization (React + Chart.js)
+
+```typescript
+import { useEffect, useState } from 'react';
+import { Pie } from 'react-chartjs-2';
+import axios from 'axios';
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
+
+interface WastedVsEatenItem {
+  status: string;
+  count: number;
+}
+
+function WastedVsActiveChart({ accessToken }: { accessToken: string }) {
+  const [data, setData] = useState<WastedVsEatenItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios
+      .get<WastedVsEatenItem[]>(
+        'https://api.expireeye.com/api/stats/wasted-vs-eaten',
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+      .then(response => {
+        setData(response.data);
+      })
+      .finally(() => setLoading(false));
+  }, [accessToken]);
+
+  if (loading) return <div>Loading comparison...</div>;
+
+  const wasted = data.find(item => item.status === 'wasted')?.count || 0;
+  const active = data.find(item => item.status === 'active')?.count || 0;
+  const total = wasted + active;
+
+  if (total === 0) {
+    return <div>No products to compare</div>;
+  }
+
+  const wasteRate = ((wasted / total) * 100).toFixed(1);
+
+  const chartData = {
+    labels: ['Wasted', 'Active'],
+    datasets: [
+      {
+        data: [wasted, active],
+        backgroundColor: [
+          'rgba(255, 99, 132, 0.8)',
+          'rgba(75, 192, 192, 0.8)',
+        ],
+        borderColor: [
+          'rgba(255, 99, 132, 1)',
+          'rgba(75, 192, 192, 1)',
+        ],
+        borderWidth: 2,
+      },
+    ],
+  };
+
+  const options = {
+    responsive: true,
+    plugins: {
+      legend: {
+        position: 'bottom' as const,
+      },
+      title: {
+        display: true,
+        text: 'Product Status Distribution',
+        font: {
+          size: 18,
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const percentage = ((value / total) * 100).toFixed(1);
+            return `${label}: ${value} (${percentage}%)`;
+          },
+        },
+      },
+    },
+  };
+
+  return (
+    <div>
+      <Pie data={chartData} options={options} />
+      
+      {/* Summary Cards */}
+      <div className="grid grid-cols-3 gap-4 mt-6">
+        <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+          <p className="text-sm text-red-600 font-semibold">Wasted</p>
+          <p className="text-3xl font-bold text-red-700">{wasted}</p>
+          <p className="text-xs text-red-500">{wasteRate}% of total</p>
+        </div>
+        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+          <p className="text-sm text-green-600 font-semibold">Active</p>
+          <p className="text-3xl font-bold text-green-700">{active}</p>
+          <p className="text-xs text-green-500">{(100 - parseFloat(wasteRate)).toFixed(1)}% of total</p>
+        </div>
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+          <p className="text-sm text-blue-600 font-semibold">Total</p>
+          <p className="text-3xl font-bold text-blue-700">{total}</p>
+          <p className="text-xs text-blue-500">All products</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## Calculation Details
+
+The endpoint queries the UserProduct table and counts:
+
+- **Wasted**: Products with `status = "expired"`
+- **Active**: Products with `status = "active"`
+
+<Note>
+  The endpoint always returns exactly two items in the array, even if counts are zero.
+</Note>
+
+## Related Endpoints
+
+- [Expiry Trends](/api/stats/expiry-trends) - Detailed trends with consumption patterns
+- [Wastage by Category](/api/stats/wastage-category) - Category-level waste analysis
+- [Expired Products](/api/stats/overview) - Expired product counts by date
+
+## Use Cases
+
+1. **Waste Rate Dashboard**: Display overall waste percentage prominently
+2. **KPI Tracking**: Monitor waste reduction goals over time
+3. **Comparison Visualizations**: Create pie charts or donut charts showing the ratio
+4. **Inventory Health**: Quick assessment of inventory status
+5. **Performance Metrics**: Calculate and track waste reduction improvements
+6. **Alerts**: Trigger notifications when waste rate exceeds a threshold
+
+## Notes
+
+- The response always includes both "wasted" and "active" status items
+- Status values are based on the UserProduct table's status field
+- The endpoint is not time-filtered; it returns current total counts
+- Products marked as consumed or deleted are not included in either count

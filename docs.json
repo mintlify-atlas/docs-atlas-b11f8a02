@@ -91,14 +91,19 @@
             "group": "Notifications",
             "pages": [
               "api/notifications/websocket",
-              "api/notifications/list"
+              "api/notifications/list",
+              "api/notifications/mark-read"
             ]
           },
           {
             "group": "User & Statistics",
             "pages": [
               "api/user/profile",
-              "api/stats/overview"
+              "api/stats/overview",
+              "api/stats/expiry-trends",
+              "api/stats/wastage-category",
+              "api/stats/wasted-vs-eaten",
+              "api/stats/nutrients"
             ]
           }
         ]
