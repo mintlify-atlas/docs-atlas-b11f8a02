@@ -1,0 +1,232 @@
+---
+title: "List Notifications"
+api: "GET /api/notification/list"
+description: "Retrieve all notifications for the authenticated user"
+---
+
+## Overview
+
+This endpoint returns a list of all notifications for the authenticated user, including both read and unread notifications. Notifications contain information about product expiry warnings, product scans, and other important events.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer YOUR_ACCESS_TOKEN`
+</ParamField>
+
+The user ID is automatically extracted from the JWT access token.
+
+## Response
+
+<ResponseField name="notifications" type="array">
+  Array of notification objects for the user
+
+  <ResponseField name="id" type="string">
+    Unique notification ID (UUID)
+  </ResponseField>
+
+  <ResponseField name="type" type="string">
+    Notification type: `info`, `warning`, or `error`
+  </ResponseField>
+
+  <ResponseField name="message" type="string">
+    Human-readable notification message
+  </ResponseField>
+
+  <ResponseField name="createdAt" type="string">
+    ISO 8601 timestamp when the notification was created
+  </ResponseField>
+
+  <ResponseField name="isRead" type="boolean">
+    Whether the notification has been marked as read
+  </ResponseField>
+</ResponseField>
+
+## Response Examples
+
+### Success (With Notifications)
+
+```json
+{
+  "notifications": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "warning",
+      "message": "Your milk expires in 2 days",
+      "createdAt": "2026-03-04T10:30:00",
+      "isRead": false
+    },
+    {
+      "id": "650e8400-e29b-41d4-a716-446655440001",
+      "type": "info",
+      "message": "Product scanned successfully: Organic Yogurt",
+      "createdAt": "2026-03-03T15:20:00",
+      "isRead": true
+    },
+    {
+      "id": "750e8400-e29b-41d4-a716-446655440002",
+      "type": "error",
+      "message": "Unable to detect product expiry date",
+      "createdAt": "2026-03-02T09:15:00",
+      "isRead": true
+    }
+  ]
+}
+```
+
+### Success (No Notifications)
+
+```json
+{
+  "message": "No notifications found"
+}
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Authentication failed or user ID not found in token.
+
+```json
+{
+  "detail": "Unauthorized"
+}
+```
+
+### 401 Missing Authorization Header
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Notification Types
+
+The `type` field indicates the severity and nature of the notification:
+
+- **info:** Informational messages (e.g., product scanned, settings updated)
+- **warning:** Important alerts that require attention (e.g., product expiring soon)
+- **error:** Critical issues that need immediate action (e.g., detection failures, system errors)
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X GET "https://api.expireeye.com/api/notification/list" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const accessToken = "your-jwt-token";
+
+fetch("https://api.expireeye.com/api/notification/list", {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    if (data.notifications) {
+      console.log(`Found ${data.notifications.length} notifications`);
+      
+      // Filter unread notifications
+      const unread = data.notifications.filter(n => !n.isRead);
+      console.log(`${unread.length} unread notifications`);
+    } else {
+      console.log(data.message); // "No notifications found"
+    }
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Python (Requests)
+
+```python
+import requests
+
+access_token = "your-jwt-token"
+url = "https://api.expireeye.com/api/notification/list"
+
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+response = requests.get(url, headers=headers)
+
+if response.status_code == 200:
+    data = response.json()
+    if "notifications" in data:
+        notifications = data["notifications"]
+        print(f"Found {len(notifications)} notifications")
+        
+        # Print unread notifications
+        unread = [n for n in notifications if not n["isRead"]]
+        for notif in unread:
+            print(f"[{notif['type'].upper()}] {notif['message']}")
+    else:
+        print(data["message"])
+else:
+    print(f"Error: {response.status_code}")
+```
+
+### TypeScript (Axios)
+
+```typescript
+import axios from 'axios';
+
+interface Notification {
+  id: string;
+  type: 'info' | 'warning' | 'error';
+  message: string;
+  createdAt: string;
+  isRead: boolean;
+}
+
+interface NotificationsResponse {
+  notifications?: Notification[];
+  message?: string;
+}
+
+async function getNotifications(accessToken: string): Promise<void> {
+  try {
+    const response = await axios.get<NotificationsResponse>(
+      'https://api.expireeye.com/api/notification/list',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (response.data.notifications) {
+      const unreadCount = response.data.notifications.filter(
+        n => !n.isRead
+      ).length;
+      
+      console.log(`Total: ${response.data.notifications.length}`);
+      console.log(`Unread: ${unreadCount}`);
+    } else {
+      console.log(response.data.message);
+    }
+  } catch (error) {
+    console.error('Failed to fetch notifications:', error);
+  }
+}
+```
+
+## Related Endpoints
+
+- [WebSocket Notifications](/api/notifications/websocket) - Real-time notification stream
+
+## Notes
+
+- Notifications are ordered by creation date (most recent may appear first depending on database query)
+- Both read and unread notifications are returned in the response
+- To filter unread notifications, check the `isRead` field on the client side
+- Consider using the WebSocket endpoint for real-time notifications instead of polling this endpoint

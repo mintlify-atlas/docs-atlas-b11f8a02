@@ -1,0 +1,75 @@
+---
+title: "Delete Product"
+api: "DELETE /api/product/inventory/delete/{product_id}"
+description: "Delete a product from the inventory"
+---
+
+<Warning>
+  This endpoint requires authentication. Include a valid Bearer token in the Authorization header.
+</Warning>
+
+## Endpoint
+
+```
+DELETE /api/product/inventory/delete/{product_id}
+```
+
+This endpoint permanently deletes a product from the inventory database.
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to delete
+</ParamField>
+
+## Authentication
+
+This endpoint requires a valid JWT Bearer token. The token should be included in the Authorization header:
+
+```
+Authorization: Bearer <your_access_token>
+```
+
+The user ID is extracted from the JWT token to verify authorization.
+
+## Response
+
+The response structure depends on the implementation of the `delete_inventory_product_data` service function.
+
+<ResponseField name="message" type="string">
+  Status message indicating the result of the deletion
+</ResponseField>
+
+<ResponseField name="productId" type="string">
+  The unique identifier of the deleted product
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X DELETE https://api.expireeye.com/api/product/inventory/delete/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+## Example Response
+
+```json
+{
+  "message": "Product deleted successfully",
+  "productId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+## Error Responses
+
+If the product is not found or the deletion fails, an appropriate error response will be returned:
+
+```json
+{
+  "detail": "Product not found"
+}
+```
+
+<Warning>
+  This action is permanent and cannot be undone. Make sure you want to delete the product before making this request.
+</Warning>

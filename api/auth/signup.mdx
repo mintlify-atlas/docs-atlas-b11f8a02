@@ -1,0 +1,137 @@
+---
+title: Signup
+description: Register a new user account
+---
+
+# Signup
+
+Creates a new user account with the provided credentials. Upon successful registration, returns user details and a JWT access token.
+
+## Endpoint
+
+```
+POST /api/auth/signup
+```
+
+## Request Body
+
+<ParamField path="name" type="string" optional>
+  User's full name.
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  User's email address. Must be a valid email format and unique.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  User's password. Must be at least 6 characters long.
+</ParamField>
+
+<ParamField path="dob" type="string" optional>
+  User's date of birth. Optional field.
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the user was created successfully.
+</ResponseField>
+
+<ResponseField name="userId" type="integer">
+  The unique identifier assigned to the newly created user.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The email address of the newly created user.
+</ResponseField>
+
+<ResponseField name="dob" type="string">
+  The date of birth of the user (empty string if not provided).
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of when the user account was created.
+</ResponseField>
+
+<Note>
+The access token is automatically set as an HTTP-only cookie named `access_token` with a 10-day expiration. The password is securely hashed using bcrypt before storage.
+</Note>
+
+## Example Request
+
+```bash
+curl -X POST https://api.expireeye.com/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "password": "securepass123",
+    "dob": "1990-01-15"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "message": "User created successfully",
+  "userId": 123,
+  "email": "john.doe@example.com",
+  "dob": "1990-01-15",
+  "created_at": "2026-03-04T10:30:45.123456"
+}
+```
+
+## Error Responses
+
+### 409 Conflict
+
+Returned when a user with the provided email already exists.
+
+```json
+{
+  "detail": "User already exists"
+}
+```
+
+### 400 Bad Request
+
+Returned when validation fails for required fields or password requirements.
+
+**Missing email:**
+```json
+{
+  "detail": "Email is required"
+}
+```
+
+**Missing password:**
+```json
+{
+  "detail": "Password is required"
+}
+```
+
+**Password too short:**
+```json
+{
+  "detail": "Password must be at least 6 characters long"
+}
+```
+
+### 500 Internal Server Error
+
+Returned when a database or server error occurs.
+
+```json
+{
+  "detail": "Internal server error"
+}
+```
+
+## Security Notes
+
+- Passwords are hashed using bcrypt with an automatically generated salt
+- The JWT token contains the user's ID and email for authentication
+- Email addresses must be unique in the system
+- All sensitive operations are wrapped in database transactions

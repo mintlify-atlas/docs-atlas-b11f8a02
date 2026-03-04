@@ -1,0 +1,162 @@
+---
+title: "Update Product in Inventory"
+api: "PUT /api/product/user/update/{product_id}"
+description: "Update quantity, expiry date, or notes for a product in the user's inventory"
+---
+
+## Overview
+
+This endpoint allows authenticated users to update specific details of a product in their inventory. Users can modify the quantity, expiry date, and notes associated with a product.
+
+## Authentication
+
+This endpoint requires authentication. The user's access token must be included in the request and contains the `userId` extracted from `request.state.user`.
+
+## Request
+
+### Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to update.
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="quantity" type="integer" optional>
+  New quantity of the product. Must be provided along with expiryDate.
+</ParamField>
+
+<ParamField body="expiryDate" type="string" optional>
+  New expiry date in ISO 8601 format. Must be provided along with quantity.
+</ParamField>
+
+<ParamField body="notes" type="string" optional>
+  Updated notes about the product.
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message confirming the product was updated.
+</ResponseField>
+
+<ResponseField name="productId" type="string">
+  The ID of the product that was updated.
+</ResponseField>
+
+<ResponseField name="quantity" type="integer">
+  Updated quantity of the product.
+</ResponseField>
+
+<ResponseField name="expiryDate" type="string">
+  Updated expiry date in ISO 8601 format.
+</ResponseField>
+
+<ResponseField name="notes" type="string">
+  Updated notes about the product.
+</ResponseField>
+
+## Examples
+
+### Update Quantity and Expiry Date
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.expireeye.com/api/product/user/update/prod_123abc" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quantity": 3,
+    "expiryDate": "2026-03-15T00:00:00.000Z",
+    "notes": "Moved to main refrigerator"
+  }'
+```
+
+```json Response
+{
+  "message": "User product updated successfully",
+  "productId": "prod_123abc",
+  "quantity": 3,
+  "expiryDate": "2026-03-15T00:00:00.000Z",
+  "notes": "Moved to main refrigerator"
+}
+```
+</CodeGroup>
+
+### Update Only Notes
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.expireeye.com/api/product/user/update/prod_456def" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "quantity": 2,
+    "expiryDate": "2026-03-10T00:00:00.000Z",
+    "notes": "Opened on March 4th"
+  }'
+```
+
+```json Response
+{
+  "message": "User product updated successfully",
+  "productId": "prod_456def",
+  "quantity": 2,
+  "expiryDate": "2026-03-10T00:00:00.000Z",
+  "notes": "Opened on March 4th"
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+### Product Not Found
+
+```json
+{
+  "detail": "Product with ID prod_999xyz does not exist in user inventory."
+}
+```
+
+**Status Code:** 404
+
+### Missing Required Fields
+
+```json
+{
+  "detail": "Both quantity and expiryDate are required for update."
+}
+```
+
+**Status Code:** 400
+
+**Note:** Both `quantity` and `expiryDate` must be provided together. You cannot update only one of these fields.
+
+### No Changes Detected
+
+```json
+{
+  "detail": "No changes detected. Please provide new values for quantity or expiryDate."
+}
+```
+
+**Status Code:** 400
+
+**Note:** This error occurs when the provided `quantity` and `expiryDate` values are identical to the existing values.
+
+## Validation Rules
+
+1. **Required Fields Together**: Both `quantity` and `expiryDate` must be provided in the request body. The endpoint will reject requests that only include one of these fields.
+
+2. **Change Detection**: The endpoint validates that at least one value (quantity or expiryDate) is different from the current stored values. If both values are identical to existing values, the update is rejected.
+
+3. **Product Ownership**: The endpoint verifies that the product belongs to the authenticated user before allowing updates.
+
+4. **Auto-update Timestamp**: The `updatedAt` field is automatically set to the current UTC time when the update is successful.
+
+## Behavior Notes
+
+- The `notes` field is optional and can be updated independently of quantity and expiryDate
+- If `notes` is not provided in the request, the existing notes are preserved
+- The endpoint performs ownership validation to ensure users can only update products in their own inventory
+- Updates trigger an automatic refresh of the product data to ensure the response reflects the latest state

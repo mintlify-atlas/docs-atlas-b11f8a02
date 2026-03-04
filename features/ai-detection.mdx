@@ -1,0 +1,326 @@
+---
+title: AI detection
+description: YOLO-based object detection for food items with Cloudinary image storage
+---
+
+ExpireEye uses YOLOv8 (You Only Look Once) deep learning model to detect and identify food items in images, providing automated product recognition with confidence scores and visual annotations.
+
+## How YOLO detection works
+
+The AI detection system processes uploaded images to identify food items and returns detailed detection results.
+
+<Steps>
+  <Step title="Upload image">
+    Send an image to the detection endpoint:
+    
+    ```bash
+    POST /api/yolo/detect
+    ```
+    
+    ```python
+    @router.post("/detect")
+    async def detect_image(request: Request, file: UploadFile = File(...)):
+        access_token = request.state.user
+        user_id = access_token.get("userId")
+        
+        file_location = os.path.join(UPLOAD_FOLDER, str(file.filename))
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    ```
+  </Step>
+  
+  <Step title="Load YOLO model">
+    The system uses a pre-trained YOLOv8 model:
+    
+    ```python
+    from ultralytics import YOLO
+    
+    model = YOLO("best.pt")
+    ```
+    
+    <Note>
+      The `best.pt` file contains the trained weights for food item detection.
+    </Note>
+  </Step>
+  
+  <Step title="Run detection">
+    The model analyzes the image and detects objects:
+    
+    ```python
+    def detect_objects(file_path: str):
+        img = cv2.imread(file_path)
+        if img is None:
+            raise ValueError(f"Could not load image at {file_path}")
+        
+        results = model.predict(source=img, conf=0.25)
+    ```
+  </Step>
+  
+  <Step title="Process detections">
+    Extract bounding boxes, confidence scores, and calculate average colors:
+    
+    ```python
+    detections = []
+    for result in results:
+        boxes = result.boxes
+        names = model.names
+        
+        if boxes is not None and len(boxes) > 0:
+            for box in boxes:
+                cls_id = int(box.cls[0])
+                conf = float(box.conf[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                
+                cropped = img[y1:y2, x1:x2]
+                avg_color = get_average_color(cropped)
+                if avg_color is not None:
+                    avg_color_rgb = [int(c) for c in avg_color[::-1]]
+                else:
+                    avg_color_rgb = None
+                
+                detections.append({
+                    "name": names[cls_id],
+                    "confidence": conf,
+                    "bbox": [x1, y1, x2, y2],
+                    "avg_color_rgb": avg_color_rgb,
+                })
+    ```
+  </Step>
+  
+  <Step title="Annotate image">
+    Draw bounding boxes and labels on the image:
+    
+    ```python
+    label = f"{names[cls_id]} {conf:.2f}"
+    cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    cv2.putText(
+        img,
+        label,
+        (x1, y1 - 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        2,
+        (0, 255, 0),
+        8,
+    )
+    ```
+  </Step>
+  
+  <Step title="Upload to Cloudinary">
+    Save the annotated image and upload it to Cloudinary:
+    
+    ```python
+    annotated_image_path = os.path.join(UPLOAD_FOLDER, "annotated_image.jpg")
+    cv2.imwrite(annotated_image_path, img)
+    
+    # Upload to Cloudinary
+    upload_result = upload(annotated_image_path)
+    annotated_image_url = upload_result.get("secure_url")
+    ```
+  </Step>
+</Steps>
+
+## Detection response
+
+The API returns the highest confidence detection along with the annotated image URL:
+
+```json
+{
+  "detection": {
+    "name": "apple",
+    "confidence": 0.92,
+    "bbox": [120, 50, 350, 280],
+    "avg_color_rgb": [198, 52, 45]
+  },
+  "annotated_image_url": "https://res.cloudinary.com/..."
+}
+```
+
+### Response fields
+
+- **name**: Detected object class name
+- **confidence**: Detection confidence score (0-1)
+- **bbox**: Bounding box coordinates [x1, y1, x2, y2]
+- **avg_color_rgb**: Average RGB color of the detected object
+- **annotated_image_url**: URL of the image with drawn bounding boxes
+
+## Cloudinary integration
+
+ExpireEye integrates with Cloudinary for cloud-based image storage:
+
+```python
+import cloudinary
+from cloudinary.uploader import upload
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Configure Cloudinary
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
+```
+
+### Environment variables
+
+Set up your Cloudinary credentials in `.env`:
+
+```bash
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+## Confidence threshold
+
+The detection system uses a confidence threshold of 0.25:
+
+```python
+results = model.predict(source=img, conf=0.25)
+```
+
+<Info>
+  You can adjust the confidence threshold to balance between detection sensitivity and accuracy. Lower values detect more objects but may include false positives.
+</Info>
+
+## Average color calculation
+
+The system calculates the average RGB color of detected objects:
+
+```python
+def get_average_color(image):
+    if image.size == 0:
+        return None
+    return np.mean(image, axis=(0, 1))
+```
+
+This feature is useful for:
+- Identifying ripeness of fruits
+- Detecting food freshness
+- Color-based product categorization
+
+## No detections handling
+
+When no objects are detected in the image:
+
+```python
+if not detections:
+    return {
+        "detections": [],
+        "message": "No objects detected",
+        "annotated_image_url": None,
+    }
+```
+
+## Highest confidence selection
+
+The system returns the detection with the highest confidence score:
+
+```python
+# Get the highest confidence detection
+highest_confidence_detection = max(detections, key=lambda d: d["confidence"])
+
+return {
+    "detection": highest_confidence_detection,
+    "annotated_image_url": annotated_image_url,
+}
+```
+
+## Using the detection API
+
+### Example request
+
+```bash
+curl -X POST "http://localhost:8000/api/yolo/detect" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@/path/to/food-image.jpg"
+```
+
+### Example with Python
+
+```python
+import requests
+
+url = "http://localhost:8000/api/yolo/detect"
+headers = {"Authorization": "Bearer YOUR_TOKEN"}
+files = {"file": open("food-image.jpg", "rb")}
+
+response = requests.post(url, headers=headers, files=files)
+result = response.json()
+
+print(f"Detected: {result['detection']['name']}")
+print(f"Confidence: {result['detection']['confidence']:.2%}")
+print(f"Annotated image: {result['annotated_image_url']}")
+```
+
+## Model details
+
+The YOLO model is loaded from `best.pt` which contains:
+
+- Pre-trained weights for food item detection
+- Class names for detected objects
+- Model architecture (YOLOv8)
+
+```python
+model = YOLO("best.pt")
+
+# Access model metadata
+names = model.names  # Dict of class IDs to names
+```
+
+<Warning>
+  Ensure the `best.pt` model file is present in the project root directory before starting the API.
+</Warning>
+
+## Integration with inventory
+
+Detected items can be automatically added to user inventory:
+
+```python
+# After detection
+detected_name = result["detection"]["name"]
+
+# Create user product
+await create_user_product(
+    user_id=user_id,
+    product_name=detected_name,
+    quantity=1,
+    expiry_date=calculated_expiry_date,
+    notes="Detected by YOLO with 90% confidence",
+    is_scanned_product=True,
+    db=db,
+)
+```
+
+<Info>
+  When `is_scanned_product=True`, the system sends a real-time WebSocket notification with detection details and nutrition information.
+</Info>
+
+## Error handling
+
+The detection system handles various error cases:
+
+```python
+try:
+    result = detect_objects(file_location)
+except Exception as e:
+    raise HTTPException(status_code=500, detail=str(e))
+```
+
+Common errors:
+- **Image load failure**: Invalid image format or corrupted file
+- **Model not found**: Missing `best.pt` file
+- **Cloudinary upload failure**: Invalid credentials or network issues
+
+## Performance considerations
+
+- Model inference typically takes 100-500ms depending on image size
+- Images are processed sequentially
+- Annotated images are stored temporarily before Cloudinary upload
+- Original uploaded files remain in the `uploads/` directory
+
+<Note>
+  For production deployments, consider implementing a queue system for handling multiple detection requests concurrently.
+</Note>

@@ -1,0 +1,96 @@
+---
+title: "Update Product"
+api: "PUT /api/product/inventory/update/{product_id}"
+description: "Update an existing product in the inventory"
+---
+
+<Warning>
+  This endpoint requires authentication. Include a valid Bearer token in the Authorization header.
+</Warning>
+
+## Endpoint
+
+```
+PUT /api/product/inventory/update/{product_id}
+```
+
+This endpoint updates the details of an existing product in the inventory database.
+
+## Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to update
+</ParamField>
+
+## Request Body
+
+All fields are optional. Only include the fields you want to update.
+
+<ParamField body="name" type="string">
+  The updated name of the product
+</ParamField>
+
+<ParamField body="category" type="string">
+  The updated category of the product
+</ParamField>
+
+<ParamField body="barcode" type="string">
+  The updated barcode identifier for the product
+</ParamField>
+
+## Authentication
+
+This endpoint requires a valid JWT Bearer token. The token should be included in the Authorization header:
+
+```
+Authorization: Bearer <your_access_token>
+```
+
+The user ID is extracted from the JWT token to verify authorization.
+
+## Response
+
+<ResponseField name="message" type="string">
+  Status message indicating successful update
+</ResponseField>
+
+<ResponseField name="productId" type="string">
+  The unique identifier of the updated product
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The updated name of the product
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X PUT https://api.expireeye.com/api/product/inventory/update/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "name": "Organic Whole Milk",
+    "category": "Dairy Products",
+    "barcode": "123456789012"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "message": "Product updated successfully",
+  "productId": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Organic Whole Milk"
+}
+```
+
+## Error Responses
+
+If the product is not found or the update fails, an appropriate error response will be returned:
+
+```json
+{
+  "detail": "Product not found"
+}
+```

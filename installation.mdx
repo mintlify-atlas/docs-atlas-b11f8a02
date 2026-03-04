@@ -1,0 +1,237 @@
+---
+title: Installation
+description: Set up ExpireEye Backend on your local machine with detailed installation instructions
+---
+
+This guide will walk you through installing and configuring the ExpireEye Backend API on your local development environment.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed on your system:
+
+- **Python 3.8 or higher** - The backend is built with FastAPI and requires Python 3.8+
+- **MySQL Server** - Database server (MySQL 5.7+ or MariaDB 10.3+)
+- **pip** - Python package installer (usually comes with Python)
+- **Git** - For cloning the repository
+
+<Note>
+  You can verify your Python version by running `python --version` or `python3 --version` in your terminal.
+</Note>
+
+## Installation steps
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the ExpireEye Backend repository to your local machine:
+
+    ```bash
+    git clone https://github.com/adgator101/ExpireEye-backend
+    cd ExpireEye-backend
+    ```
+  </Step>
+
+  <Step title="Create a virtual environment">
+    It's recommended to use a virtual environment to isolate project dependencies:
+
+    ```bash
+    python -m venv venv
+    ```
+
+    Activate the virtual environment:
+
+    <CodeGroup>
+      ```bash Linux/macOS
+      source venv/bin/activate
+      ```
+
+      ```bash Windows (CMD)
+      venv\Scripts\activate.bat
+      ```
+
+      ```bash Windows (PowerShell)
+      venv\Scripts\Activate.ps1
+      ```
+    </CodeGroup>
+
+    <Note>
+      When activated, you should see `(venv)` at the beginning of your terminal prompt.
+    </Note>
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all required Python packages from the requirements file:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    This will install FastAPI, SQLAlchemy, Uvicorn, and other dependencies including:
+    - `fastapi==0.116.1` - Web framework
+    - `uvicorn==0.35.0` - ASGI server
+    - `sqlalchemy==2.0.41` - ORM for database operations
+    - `alembic==1.16.4` - Database migration tool
+    - `bcrypt==4.3.0` - Password hashing
+    - `PyJWT==2.10.1` - JWT token handling
+    - `pymssql==2.3.7` - MySQL database driver
+    - `python-dotenv==1.1.1` - Environment variable management
+  </Step>
+
+  <Step title="Set up MySQL database">
+    Create a new MySQL database for the project:
+
+    ```sql
+    CREATE DATABASE expireeye_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+
+    Create a database user (optional but recommended):
+
+    ```sql
+    CREATE USER 'expireeye_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+    GRANT ALL PRIVILEGES ON expireeye_db.* TO 'expireeye_user'@'localhost';
+    FLUSH PRIVILEGES;
+    ```
+
+    <Warning>
+      Make sure to use a strong password in production environments and never commit credentials to version control.
+    </Warning>
+  </Step>
+
+  <Step title="Configure environment variables">
+    Copy the example environment file and configure it with your settings:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Open `.env` in your text editor and update the following variables:
+
+    ```bash
+    # Database Configuration
+    DB_USER=expireeye_user
+    DB_PASSWORD=your_secure_password
+    DB_HOST=localhost
+    DB_PORT=3306
+    DB_NAME=expireeye_db
+
+    # JWT Secret (generate a secure random string)
+    SECRET_KEY=your_jwt_secret_token_min_32_characters
+
+    # API Ninja Nutrition API Key (optional, for nutrition data)
+    NUTRITION_API_KEY=your_api_ninja_nutrition_key
+
+    # Cloudinary Configuration (optional, for image uploads)
+    cloud_name=your_cloud_name
+    api_key=your_api_key
+    api_secret=your_api_secret
+    ```
+
+    <Accordion title="How to generate a secure SECRET_KEY">
+      You can generate a secure secret key using Python:
+
+      ```python
+      import secrets
+      print(secrets.token_urlsafe(32))
+      ```
+
+      Or using OpenSSL in your terminal:
+
+      ```bash
+      openssl rand -hex 32
+      ```
+    </Accordion>
+
+    <Note>
+      The Nutrition API and Cloudinary credentials are optional. The core authentication and product management features will work without them.
+    </Note>
+  </Step>
+
+  <Step title="Run database migrations">
+    Initialize the database schema using Alembic migrations:
+
+    ```bash
+    alembic upgrade head
+    ```
+
+    This command will create all necessary tables in your database including:
+    - `users` - User accounts and authentication
+    - `products` - Product master inventory
+    - `user_products` - User-specific product instances with expiry dates
+    - `notifications` - Expiry notifications
+    - `nutrition` - Nutritional information
+    - `scan_logs` - Product scan history
+
+    <Accordion title="Troubleshooting migration errors">
+      If you encounter errors during migration:
+
+      1. **Connection refused**: Verify MySQL is running and credentials are correct
+      2. **Permission denied**: Ensure the database user has proper privileges
+      3. **Table already exists**: Reset the database and run migrations again:
+         ```bash
+         alembic downgrade base
+         alembic upgrade head
+         ```
+    </Accordion>
+  </Step>
+
+  <Step title="Verify installation">
+    Start the development server to verify everything is set up correctly:
+
+    ```bash
+    uvicorn app.main:app --reload
+    ```
+
+    You should see output similar to:
+
+    ```
+    INFO:     Will watch for changes in these directories: ['/path/to/ExpireEye-backend']
+    INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+    INFO:     Started reloader process [12345] using StatReload
+    INFO:     Started server process [12346]
+    INFO:     Waiting for application startup.
+    INFO:     Application startup complete.
+    Scheduler started
+    ```
+
+    Open your browser and navigate to `http://localhost:8000/api/status` - you should see:
+
+    ```json
+    {
+      "status": "OK",
+      "message": "Server Is Running"
+    }
+    ```
+  </Step>
+</Steps>
+
+## Next steps
+
+Now that you have ExpireEye Backend installed, you can:
+
+- Follow the [Quickstart guide](/quickstart) to make your first API request
+- Explore the interactive API documentation at `http://localhost:8000/docs`
+- Review the [API Reference](/api/auth/login) for detailed endpoint documentation
+
+## Optional configuration
+
+### YOLO object detection
+
+The backend includes YOLO-based product detection capabilities. To use this feature:
+
+1. Ensure you have CUDA-compatible GPU for optimal performance (optional)
+2. The required PyTorch and YOLO dependencies are already in `requirements.txt`
+3. Model weights will be downloaded automatically on first use
+
+### Production deployment
+
+For production environments:
+
+1. Set `--reload` to false when starting uvicorn
+2. Use a production-grade ASGI server like Gunicorn with Uvicorn workers
+3. Configure proper CORS origins in `app/main.py`
+4. Use environment-specific `.env` files
+5. Enable HTTPS/SSL certificates
+6. Set up proper database connection pooling
+
+<Warning>
+  Never use the development server (`--reload`) in production. Always use a production ASGI server and enable proper security measures.
+</Warning>

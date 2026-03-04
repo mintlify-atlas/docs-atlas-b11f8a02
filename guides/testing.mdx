@@ -1,0 +1,486 @@
+---
+title: 'Testing'
+description: 'Test your API endpoints using interactive documentation and manual testing approaches'
+---
+
+## Overview
+
+The ExpireEye Backend API uses FastAPI's built-in interactive documentation for testing during development. This guide covers how to effectively test endpoints using Swagger UI, manual testing strategies, and common test scenarios.
+
+## Interactive API Testing with Swagger UI
+
+FastAPI automatically generates interactive API documentation at `/docs` that you can use to test all endpoints without writing code.
+
+### Accessing Swagger UI
+
+1. Start the development server:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+2. Open your browser and navigate to:
+   ```
+   http://localhost:8000/api/docs
+   ```
+
+<Note>
+  Remember the `/api` prefix - the API root path is configured in `app/main.py:31`. All endpoints are automatically prefixed with `/api`.
+</Note>
+
+### Understanding the Interface
+
+The Swagger UI organizes endpoints by tags:
+
+- **auth** - Authentication endpoints (login, signup)
+- **Product Inventory** - Product management
+- **User Inventory** - User's product inventory
+- **User Profile** - User account management
+- **Notifications** - Notification system
+- **YOLO Detection** - Image-based product detection
+- **Statistics** - Usage and expiry statistics
+- **Status** - Health check endpoint
+- **QR Code** - QR code scanning
+
+### Testing Authentication Flow
+
+<Steps>
+  <Step title="Create a Test Account">
+    1. Find the **POST /api/auth/signup** endpoint under the "auth" section
+    2. Click "Try it out"
+    3. Fill in the request body:
+    
+    ```json
+    {
+      "name": "Test User",
+      "email": "test@example.com",
+      "password": "testpass123",
+      "dob": "1990-01-01"
+    }
+    ```
+    
+    4. Click "Execute"
+    5. Check the response - you should receive a `200` status with a token
+    
+    <Note>
+      Password must be at least 6 characters (validated in `app/routers/auth.py:85-88`).
+    </Note>
+  </Step>
+
+  <Step title="Copy the Authentication Token">
+    From the signup response, copy the `token` value:
+    
+    ```json
+    {
+      "message": "User created successfully",
+      "userId": 1,
+      "email": "test@example.com",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+    
+    This JWT token is valid for 4000 minutes (configured in `app/utils/jwt.py:9`).
+  </Step>
+
+  <Step title="Authorize Future Requests">
+    1. Click the **"Authorize"** button at the top right of the Swagger UI
+    2. In the "Value" field, enter: `Bearer <your-token>`
+    3. Click "Authorize", then "Close"
+    
+    <Warning>
+      Don't forget the `Bearer` prefix! The middleware expects the format `Bearer <token>` (see `app/main.py:78`).
+    </Warning>
+    
+    All subsequent requests will now include the Authorization header automatically.
+  </Step>
+
+  <Step title="Test Login">
+    Verify authentication works by testing the login endpoint:
+    
+    1. Find **POST /api/auth/login**
+    2. Click "Try it out"
+    3. Enter credentials:
+    
+    ```json
+    {
+      "email": "test@example.com",
+      "password": "testpass123"
+    }
+    ```
+    
+    4. Click "Execute"
+    5. You should receive a new token in the response
+  </Step>
+</Steps>
+
+### Testing Protected Endpoints
+
+Once authorized, you can test any protected endpoint. Here are common test scenarios:
+
+#### Product Detection (YOLO)
+
+Test the image detection feature:
+
+<Accordion title="Test Image Detection Endpoint">
+  **Endpoint:** `POST /api/yolo/detect`
+  
+  **Steps:**
+  1. Locate the endpoint under "YOLO Detection"
+  2. Click "Try it out"
+  3. Click "Choose File" and select an image containing food products
+  4. Click "Execute"
+  
+  **Expected Response:**
+  ```json
+  {
+    "detected_objects": [
+      {
+        "class": "apple",
+        "confidence": 0.89,
+        "bbox": [100, 150, 200, 250]
+      }
+    ],
+    "image_path": "uploads/your_image.jpg"
+  }
+  ```
+  
+  **What Happens:**
+  - Image is saved to the `uploads/` directory (`app/routers/detection.py:22-23`)
+  - YOLO model processes the image
+  - Detected objects are returned with confidence scores
+  
+  <Note>
+    The endpoint requires authentication. The user ID is extracted from the JWT token (`app/routers/detection.py:18`).
+  </Note>
+</Accordion>
+
+#### QR Code Scanning
+
+Test QR code detection:
+
+<Accordion title="Test QR Code Scanner">
+  **Endpoint:** `POST /api/qr`
+  
+  **Steps:**
+  1. Generate a test QR code (use any online QR code generator)
+  2. Download the QR code image
+  3. In Swagger UI, find **POST /api/qr** under "QR Code"
+  4. Click "Try it out"
+  5. Upload the QR code image
+  6. Click "Execute"
+  
+  **Expected Response:**
+  ```json
+  {
+    "message": "QR Scanned successfully",
+    "data": "Product barcode or text from QR"
+  }
+  ```
+  
+  **If no QR detected:**
+  ```json
+  {
+    "error": "No QR code found in the image"
+  }
+  ```
+  
+  The QR code detector uses OpenCV (`app/main.py:146-159`).
+</Accordion>
+
+#### User Inventory Management
+
+Test product inventory operations:
+
+<Accordion title="Test Adding Products to Inventory">
+  **Endpoint:** `POST /api/product/user-inventory`
+  
+  **Steps:**
+  1. Ensure you're authorized (see authentication steps above)
+  2. Find the endpoint under "User Inventory"
+  3. Click "Try it out"
+  4. Enter product data:
+  
+  ```json
+  {
+    "product_name": "Milk",
+    "category": "Dairy",
+    "expiry_date": "2026-03-15",
+    "quantity": 2
+  }
+  ```
+  
+  5. Click "Execute"
+  
+  **Expected Response:**
+  ```json
+  {
+    "message": "Product added to inventory",
+    "product_id": 123
+  }
+  ```
+</Accordion>
+
+#### Statistics and Analytics
+
+<Accordion title="Test Statistics Endpoints">
+  **Endpoint:** `GET /api/stats/expiry-summary`
+  
+  Retrieve expiry statistics for the authenticated user:
+  
+  **Steps:**
+  1. Find **GET /api/stats/expiry-summary**
+  2. Click "Try it out"
+  3. Click "Execute"
+  
+  **Expected Response:**
+  ```json
+  {
+    "expired": 3,
+    "expiring_soon": 5,
+    "fresh": 12,
+    "total_products": 20
+  }
+  ```
+  
+  This helps test that the scheduled expiry checking job is working (configured in `app/main.py:173`).
+</Accordion>
+
+## Manual Testing Strategies
+
+### Using cURL
+
+Test endpoints from the command line:
+
+```bash
+# Test login
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"testpass123"}'
+
+# Test authenticated endpoint
+curl -X GET http://localhost:8000/api/stats/expiry-summary \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+
+# Test file upload
+curl -X POST http://localhost:8000/api/yolo/detect \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE" \
+  -F "file=@/path/to/image.jpg"
+```
+
+### Using Postman
+
+1. Import the OpenAPI spec from `http://localhost:8000/api/openapi.json`
+2. Create an environment with variables:
+   - `base_url`: `http://localhost:8000/api`
+   - `token`: Your JWT token
+3. Set Authorization header: `Bearer {{token}}`
+4. Test endpoints using the imported collection
+
+### Using HTTPie
+
+A more user-friendly alternative to cURL:
+
+```bash
+# Install HTTPie
+pip install httpie
+
+# Test login
+http POST localhost:8000/api/auth/login \
+  email=test@example.com password=testpass123
+
+# Test with authentication
+http GET localhost:8000/api/stats/expiry-summary \
+  "Authorization:Bearer YOUR_TOKEN"
+
+# Upload file
+http -f POST localhost:8000/api/yolo/detect \
+  file@image.jpg \
+  "Authorization:Bearer YOUR_TOKEN"
+```
+
+## Testing Error Scenarios
+
+### Authentication Errors
+
+<Accordion title="Test Missing Authorization Header">
+  **Test:** Call a protected endpoint without authentication
+  
+  1. In Swagger UI, click "Authorize" and then "Logout"
+  2. Try calling **GET /api/stats/expiry-summary**
+  3. Click "Execute"
+  
+  **Expected Response:** `401 Unauthorized`
+  ```json
+  {
+    "detail": "Authorization header missing or invalid."
+  }
+  ```
+  
+  This error comes from the middleware (`app/main.py:74-77`).
+</Accordion>
+
+<Accordion title="Test Invalid Token">
+  **Test:** Use an expired or malformed token
+  
+  1. Click "Authorize" and enter: `Bearer invalid_token_123`
+  2. Try any protected endpoint
+  
+  **Expected Response:** `401 Unauthorized`
+  ```json
+  {
+    "detail": "Access token is invalid."
+  }
+  ```
+  
+  Token validation happens in `app/main.py:86-93`.
+</Accordion>
+
+<Accordion title="Test Invalid Credentials">
+  **Test:** Login with wrong password
+  
+  1. Call **POST /api/auth/login** with incorrect password
+  
+  ```json
+  {
+    "email": "test@example.com",
+    "password": "wrongpassword"
+  }
+  ```
+  
+  **Expected Response:** `401 Unauthorized`
+  ```json
+  {
+    "detail": "Invalid email or password"
+  }
+  ```
+  
+  Password verification uses bcrypt (`app/routers/auth.py:31-32`).
+</Accordion>
+
+### Validation Errors
+
+<Accordion title="Test Required Field Validation">
+  **Test:** Submit incomplete data
+  
+  1. Call **POST /api/auth/signup** with missing required fields:
+  
+  ```json
+  {
+    "email": "test@example.com"
+  }
+  ```
+  
+  **Expected Response:** `422 Unprocessable Entity`
+  ```json
+  {
+    "errors": [
+      {
+        "field": "name",
+        "message": "This field is required."
+      },
+      {
+        "field": "password",
+        "message": "This field is required."
+      }
+    ]
+  }
+  ```
+  
+  Custom validation error handler is in `app/main.py:99-115`.
+</Accordion>
+
+### File Upload Errors
+
+<Accordion title="Test Invalid File Upload">
+  **Test:** Upload an invalid file type
+  
+  1. Call **POST /api/yolo/detect** with a non-image file
+  2. Upload a `.txt` or `.pdf` file instead
+  
+  **Expected Response:** `500 Internal Server Error`
+  
+  The YOLO service will fail to process the file and return an error (`app/routers/detection.py:26-28`).
+</Accordion>
+
+## Testing WebSocket Notifications
+
+The API includes a WebSocket endpoint for real-time notifications:
+
+```javascript
+// Connect to WebSocket
+const token = "your_jwt_token";
+const ws = new WebSocket(`ws://localhost:8000/api/ws/notification?access_token=${token}`);
+
+ws.onopen = () => {
+  console.log("Connected to notifications");
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log("Notification:", data);
+};
+
+ws.onerror = (error) => {
+  console.error("WebSocket error:", error);
+};
+```
+
+**Test Scenarios:**
+- Connect with valid token
+- Connect with invalid/missing token
+- Receive notifications when products expire
+- Handle connection timeouts
+
+<Note>
+  WebSocket endpoint is at `/ws/notification` and requires the `access_token` query parameter (`app/main.py:196-200`).
+</Note>
+
+## Common Test Workflows
+
+### Complete User Journey Test
+
+<Steps>
+  <Step title="Create Account">
+    POST /api/auth/signup
+  </Step>
+  
+  <Step title="Add Products">
+    POST /api/product/user-inventory (multiple times with different products)
+  </Step>
+  
+  <Step title="Scan Products">
+    POST /api/yolo/detect (test image recognition)
+  </Step>
+  
+  <Step title="View Statistics">
+    GET /api/stats/expiry-summary
+  </Step>
+  
+  <Step title="Check Notifications">
+    GET /api/notification (check for expiry alerts)
+  </Step>
+  
+  <Step title="Update Profile">
+    PUT /api/user/profile
+  </Step>
+</Steps>
+
+### Scheduled Job Testing
+
+Wait for the scheduler to run (every 10 seconds in development) and check:
+
+1. Console logs for "Scheduler started" message
+2. Notifications for products expiring soon
+3. Statistics update reflecting current expiry status
+
+Monitor the console output to see when `check_product_expiry` executes.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/guides/local-development">
+    Set up your development environment
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Solve common testing issues
+  </Card>
+</CardGroup>

@@ -1,0 +1,239 @@
+---
+title: Environment Setup
+description: Complete guide to configuring environment variables for ExpireEye Backend API
+icon: gear
+---
+
+This guide covers all required environment variables and configuration settings for the ExpireEye Backend API.
+
+## Prerequisites
+
+Before configuring your environment, ensure you have:
+
+- Python 3.8 or higher installed
+- MySQL database server running
+- Access to external services (Cloudinary, API Ninjas)
+- A text editor for creating `.env` files
+
+## Environment Variables
+
+The ExpireEye Backend requires several environment variables for database connectivity, authentication, and external service integrations.
+
+### Creating Your Environment File
+
+<Steps>
+  <Step title="Copy the example file">
+    Start by copying the example environment file:
+    
+    ```bash
+    cp .env.example .env
+    ```
+  </Step>
+  
+  <Step title="Configure the variables">
+    Open `.env` in your text editor and update all values according to the sections below.
+  </Step>
+</Steps>
+
+### Database Configuration
+
+The application uses MySQL with PyMySQL driver. Configure these variables for your database connection:
+
+```bash .env
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_HOST=your_db_host
+DB_PORT=3306
+DB_NAME=your_db_name
+```
+
+<Note>
+The database connection is configured in `app/db/session.py` using the format:
+`mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}`
+</Note>
+
+**Configuration Details:**
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `DB_USER` | MySQL database username | `expireeye_user` |
+| `DB_PASSWORD` | MySQL database password | `SecureP@ssw0rd` |
+| `DB_HOST` | Database host address | `localhost` or `mysql.example.com` |
+| `DB_PORT` | MySQL port number | `3306` (default) |
+| `DB_NAME` | Target database name | `expireeye_db` |
+
+<Warning>
+Ensure your database user has sufficient privileges to create/modify tables, as Alembic migrations will need to execute DDL statements.
+</Warning>
+
+### JWT Authentication
+
+The application uses JWT tokens for API authentication. Configure a strong secret key:
+
+```bash .env
+SECRET_KEY=your_jwt_secret_token
+```
+
+**Best Practices:**
+
+- Use a cryptographically strong random string (minimum 32 characters)
+- Never commit your actual secret key to version control
+- Rotate keys periodically in production environments
+
+Generate a secure key using Python:
+
+```python
+import secrets
+print(secrets.token_urlsafe(32))
+```
+
+<Note>
+The JWT configuration in `app/utils/jwt.py` sets tokens to expire after 4000 minutes. Access tokens are validated via the `Authorization: Bearer <token>` header on all protected endpoints.
+</Note>
+
+### Cloudinary Integration
+
+ExpireEye uses Cloudinary for image storage and management. Configure your Cloudinary credentials:
+
+```bash .env
+cloud_name = "your_cloud_name"
+api_key = "your_api_key"
+api_secret = "your_api_secret"
+```
+
+**How to obtain Cloudinary credentials:**
+
+<Steps>
+  <Step title="Create a Cloudinary account">
+    Sign up at [https://cloudinary.com](https://cloudinary.com) if you don't have an account.
+  </Step>
+  
+  <Step title="Access your dashboard">
+    Navigate to your Cloudinary Dashboard after logging in.
+  </Step>
+  
+  <Step title="Copy credentials">
+    Find your `Cloud name`, `API Key`, and `API Secret` in the Account Details section.
+  </Step>
+</Steps>
+
+### External API Keys
+
+The application integrates with API Ninjas for nutrition data:
+
+```bash .env
+NUTRITION_API_KEY=your_api_ninja_nutrition_key
+```
+
+Get your API key from [API Ninjas](https://api-ninjas.com/) by:
+
+1. Creating a free account
+2. Navigating to the API dashboard
+3. Generating a new API key for the Nutrition API
+
+## Connection Pool Settings
+
+The database connection pool is configured in `app/db/session.py` with the following settings:
+
+```python app/db/session.py
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,      # Verify connections before use
+    pool_recycle=3600,       # Recycle connections every hour
+    pool_size=10,            # Number of permanent connections
+    max_overflow=5,          # Additional connections when needed
+    echo=False,              # Set to True for SQL query logging
+)
+```
+
+<Note>
+For development environments, you can set `echo=True` to log all SQL queries for debugging purposes.
+</Note>
+
+## Verifying Your Configuration
+
+After setting up your environment variables, verify the configuration:
+
+<CodeGroup>
+```bash Test Database Connection
+python -c "from app.db.session import engine; print('Connection successful!' if engine.connect() else 'Connection failed')"
+```
+
+```bash Check Environment Variables
+python -c "import os; from dotenv import load_dotenv; load_dotenv(); print('DB_USER:', os.getenv('DB_USER')); print('DB_NAME:', os.getenv('DB_NAME')); print('SECRET_KEY set:', bool(os.getenv('SECRET_KEY')))"
+```
+</CodeGroup>
+
+## Environment-Specific Configurations
+
+### Development
+
+```bash .env
+# Development settings
+DB_HOST=localhost
+DB_PORT=3306
+
+# Enable SQL logging
+# Modify app/db/session.py: echo=True
+```
+
+### Production
+
+```bash .env
+# Production settings
+DB_HOST=production-mysql-server.com
+DB_PORT=3306
+
+# Use strong credentials
+SECRET_KEY=<generated-secure-key>
+```
+
+<Warning>
+In production environments:
+- Never use default or weak passwords
+- Enable SSL/TLS for database connections
+- Store secrets in a secure vault (AWS Secrets Manager, HashiCorp Vault, etc.)
+- Use environment-specific `.env` files and never commit them to version control
+</Warning>
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you encounter database connection errors:
+
+1. **Verify MySQL is running**: `systemctl status mysql` or `brew services list`
+2. **Check credentials**: Ensure DB_USER has proper permissions
+3. **Test connectivity**: Use `mysql -u {DB_USER} -p -h {DB_HOST}` to test manually
+4. **Check firewall**: Ensure port 3306 is accessible
+
+### JWT Token Issues
+
+If authentication fails:
+
+1. Verify `SECRET_KEY` is set and non-empty
+2. Check token expiration settings in `app/utils/jwt.py`
+3. Ensure the `Authorization` header format is correct: `Bearer <token>`
+
+### Import Errors
+
+If you see module import errors:
+
+```bash
+# Ensure you're in the project root and virtual environment is activated
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Next Steps
+
+After configuring your environment:
+
+1. [Run database migrations](/guides/database-migrations) to set up your schema
+2. [Deploy to production](/guides/deployment) when ready
+
+## Additional Resources
+
+- [FastAPI Environment Variables](https://fastapi.tiangolo.com/advanced/settings/)
+- [SQLAlchemy Engine Configuration](https://docs.sqlalchemy.org/en/20/core/engines.html)
+- [Cloudinary Python SDK](https://cloudinary.com/documentation/python_integration)

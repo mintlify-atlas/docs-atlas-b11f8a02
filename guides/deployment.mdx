@@ -1,0 +1,822 @@
+---
+title: Production Deployment
+description: Complete guide to deploying ExpireEye Backend API in production environments
+icon: rocket
+---
+
+This guide covers production deployment considerations, configuration, and best practices for the ExpireEye Backend API.
+
+## Overview
+
+ExpireEye Backend is a FastAPI application that requires careful configuration for production environments. Key considerations include:
+
+- ASGI server configuration (Uvicorn)
+- CORS policy management
+- Background job scheduling (APScheduler)
+- Database connection pooling
+- Security hardening
+- Performance optimization
+
+## Pre-Deployment Checklist
+
+Before deploying to production, ensure you have:
+
+<Steps>
+  <Step title="Environment configured">
+    All [environment variables](/guides/environment-setup) are set with production values
+  </Step>
+  
+  <Step title="Database migrations applied">
+    [Database schema](/guides/database-migrations) is up-to-date with `alembic upgrade head`
+  </Step>
+  
+  <Step title="Dependencies installed">
+    All requirements from `requirements.txt` are installed in your production environment
+  </Step>
+  
+  <Step title="SSL/TLS certificates">
+    Valid SSL certificates are configured for HTTPS
+  </Step>
+  
+  <Step title="Monitoring setup">
+    Logging and monitoring tools are configured
+  </Step>
+</Steps>
+
+## Uvicorn Production Configuration
+
+ExpireEye uses Uvicorn as the ASGI server. For production, use the following configuration:
+
+### Basic Production Start
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+### Recommended Production Settings
+
+<CodeGroup>
+```bash Production Start
+uvicorn app.main:app \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --workers 4 \
+  --log-level info \
+  --access-log \
+  --no-use-colors \
+  --proxy-headers \
+  --forwarded-allow-ips='*'
+```
+
+```bash With SSL
+uvicorn app.main:app \
+  --host 0.0.0.0 \
+  --port 443 \
+  --workers 4 \
+  --ssl-keyfile=/path/to/key.pem \
+  --ssl-certfile=/path/to/cert.pem \
+  --log-level info \
+  --access-log
+```
+
+```bash Systemd Service
+# /etc/systemd/system/expireeye.service
+[Unit]
+Description=ExpireEye Backend API
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/expireeye
+Environment="PATH=/opt/expireeye/venv/bin"
+ExecStart=/opt/expireeye/venv/bin/uvicorn app.main:app \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --workers 4 \
+  --log-level info
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+</CodeGroup>
+
+### Worker Process Configuration
+
+Calculate optimal worker count based on your server:
+
+```bash
+# Formula: (2 * CPU_CORES) + 1
+workers=$((2 * $(nproc) + 1))
+uvicorn app.main:app --workers $workers
+```
+
+<Note>
+The application uses approximately 200-300MB per worker. Ensure your server has adequate RAM for all workers plus the database connection pool.
+</Note>
+
+## CORS Configuration
+
+The application includes CORS middleware configuration in `app/main.py`:
+
+```python app/main.py
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://expire-eye.vercel.app",
+    "https://476d2d8e876e.ngrok-free.app",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*", "GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*", "Authorization"],
+)
+```
+
+### Production CORS Hardening
+
+<Warning>
+The current configuration includes development origins. Before deploying to production, update the origins list to only include your production domains.
+</Warning>
+
+Update `app/main.py` for production:
+
+```python app/main.py
+import os
+
+# Load allowed origins from environment variable
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",")
+
+origins = [origin.strip() for origin in ALLOWED_ORIGINS if origin.strip()]
+
+# Add explicit production origins
+if os.getenv("ENV") == "production":
+    origins = [
+        "https://your-production-domain.com",
+        "https://api.your-production-domain.com",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
+```
+
+Add to your `.env`:
+
+```bash .env
+ENV=production
+ALLOWED_ORIGINS=https://your-domain.com,https://app.your-domain.com
+```
+
+## Background Scheduler Configuration
+
+ExpireEye uses APScheduler for background tasks like checking product expiry:
+
+```python app/main.py
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+scheduler = AsyncIOScheduler()
+
+@app.on_event("startup")
+async def startup_event():
+    scheduler.add_job(check_product_expiry, CronTrigger(second="*/10"))
+    scheduler.start()
+    print("Scheduler started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    scheduler.shutdown()
+```
+
+### Production Scheduler Configuration
+
+<Note>
+The current configuration runs every 10 seconds (`second="*/10"`), which is suitable for development. For production, adjust the frequency based on your needs.
+</Note>
+
+Recommended production schedules:
+
+<CodeGroup>
+```python Every 5 Minutes
+scheduler.add_job(
+    check_product_expiry,
+    CronTrigger(minute="*/5")
+)
+```
+
+```python Every Hour
+scheduler.add_job(
+    check_product_expiry,
+    CronTrigger(hour="*", minute="0")
+)
+```
+
+```python Daily at 2 AM
+scheduler.add_job(
+    check_product_expiry,
+    CronTrigger(hour="2", minute="0")
+)
+```
+
+```python Custom Schedule
+scheduler.add_job(
+    check_product_expiry,
+    CronTrigger(
+        day_of_week="mon-fri",
+        hour="8,12,16,20",
+        minute="0"
+    )
+)
+```
+</CodeGroup>
+
+### Scheduler Best Practices
+
+1. **Avoid frequent checks** - Balance freshness with system load
+2. **Use job coalescing** - Prevent job pile-up during downtime
+3. **Add error handling** - Ensure failed jobs don't crash the scheduler
+4. **Monitor job execution** - Track job duration and failures
+
+Example with error handling:
+
+```python
+async def check_product_expiry_safe():
+    try:
+        await check_product_expiry()
+    except Exception as e:
+        logger.error(f"Product expiry check failed: {e}")
+        # Send alert to monitoring system
+
+scheduler.add_job(
+    check_product_expiry_safe,
+    CronTrigger(minute="*/5"),
+    max_instances=1,  # Prevent concurrent runs
+    coalesce=True,    # Combine missed runs
+)
+```
+
+## Database Configuration for Production
+
+The database connection pool in `app/db/session.py` needs tuning for production:
+
+```python app/db/session.py
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,      # Essential for production
+    pool_recycle=3600,       # Recycle connections every hour
+    pool_size=10,            # Adjust based on worker count
+    max_overflow=5,          # Extra connections when needed
+    echo=False,              # Disable in production
+)
+```
+
+### Production Pool Sizing
+
+Calculate pool size based on workers and concurrent requests:
+
+```python
+# Formula: pool_size = (workers * expected_concurrent_requests_per_worker)
+# For 4 workers with ~2-3 concurrent DB operations each:
+pool_size = 10
+max_overflow = 5
+```
+
+<Warning>
+Ensure your MySQL `max_connections` setting can accommodate all application pools plus admin connections:
+```sql
+SET GLOBAL max_connections = 200;
+```
+</Warning>
+
+### Production Database Settings
+
+```python app/db/session.py
+import os
+
+# Determine environment
+IS_PRODUCTION = os.getenv("ENV") == "production"
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "5")),
+    echo=False,  # Never True in production
+    connect_args={
+        "charset": "utf8mb4",
+        "connect_timeout": 10,
+    } if IS_PRODUCTION else {}
+)
+```
+
+Add to `.env`:
+
+```bash .env
+ENV=production
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=5
+```
+
+## Security Hardening
+
+### JWT Configuration
+
+Review JWT settings in `app/utils/jwt.py`:
+
+```python app/utils/jwt.py
+SECRET_KEY = os.getenv("SECRET_KEY")
+ACCESS_TOKEN_EXPIRE_MINUTES = 4000  # ~2.7 days
+```
+
+<Warning>
+The default token expiration of 4000 minutes (2.7 days) is very long for production. Consider reducing this for better security.
+</Warning>
+
+Recommended production settings:
+
+```python app/utils/jwt.py
+# Use different expiration for production
+IS_PRODUCTION = os.getenv("ENV") == "production"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv(
+    "ACCESS_TOKEN_EXPIRE_MINUTES",
+    "60" if IS_PRODUCTION else "4000"
+))
+```
+
+### API Security Middleware
+
+The application includes authentication middleware in `app/main.py`:
+
+```python app/main.py
+@app.middleware("http")
+async def access_token_middleware(request: Request, call_next):
+    # Skip authentication for public paths
+    public_paths = [
+        "/api/auth/login",
+        "/api/auth/signup",
+        "/api/status",
+        "/docs",
+        "/redoc",
+        "/api/openapi.json",
+    ]
+    
+    if request.url.path in public_paths:
+        return await call_next(request)
+    
+    # Validate JWT token
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Authorization header missing or invalid."}
+        )
+    
+    access_token = auth_header.split("Bearer ")[-1].strip()
+    # ... token validation
+```
+
+<Note>
+In production, consider disabling `/docs` and `/redoc` endpoints or protecting them with authentication.
+</Note>
+
+Disable docs in production:
+
+```python app/main.py
+import os
+
+IS_PRODUCTION = os.getenv("ENV") == "production"
+
+app = FastAPI(
+    root_path="/api",
+    root_path_in_servers="/api",
+    docs_url=None if IS_PRODUCTION else "/docs",
+    redoc_url=None if IS_PRODUCTION else "/redoc",
+)
+```
+
+## Reverse Proxy Configuration
+
+### Nginx Configuration
+
+Recommended Nginx setup as a reverse proxy:
+
+```nginx nginx.conf
+upstream expireeye_backend {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 80;
+    server_name api.expireeye.com;
+    
+    # Redirect to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.expireeye.com;
+    
+    # SSL Configuration
+    ssl_certificate /etc/letsencrypt/live/api.expireeye.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.expireeye.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    
+    # Security Headers
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Logging
+    access_log /var/log/nginx/expireeye-access.log;
+    error_log /var/log/nginx/expireeye-error.log;
+    
+    # File upload size (for image uploads)
+    client_max_body_size 10M;
+    
+    location /api {
+        proxy_pass http://expireeye_backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # WebSocket endpoint
+    location /api/ws {
+        proxy_pass http://expireeye_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        
+        # WebSocket timeouts
+        proxy_connect_timeout 7d;
+        proxy_send_timeout 7d;
+        proxy_read_timeout 7d;
+    }
+}
+```
+
+### Apache Configuration
+
+Alternative Apache setup with mod_proxy:
+
+```apache apache.conf
+<VirtualHost *:443>
+    ServerName api.expireeye.com
+    
+    SSLEngine on
+    SSLCertificateFile /etc/letsencrypt/live/api.expireeye.com/cert.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/api.expireeye.com/privkey.pem
+    SSLCertificateChainFile /etc/letsencrypt/live/api.expireeye.com/chain.pem
+    
+    ProxyPreserveHost On
+    ProxyPass /api http://127.0.0.1:8000/api
+    ProxyPassReverse /api http://127.0.0.1:8000/api
+    
+    # WebSocket support
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule /api/ws/(.*) ws://127.0.0.1:8000/api/ws/$1 [P,L]
+    
+    <Proxy *>
+        Order deny,allow
+        Allow from all
+    </Proxy>
+</VirtualHost>
+```
+
+## Deployment Platforms
+
+### Docker Deployment
+
+Create a production-ready Dockerfile:
+
+```dockerfile Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    default-libmysqlclient-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create uploads directory
+RUN mkdir -p uploads
+
+# Expose port
+EXPOSE 8000
+
+# Run migrations and start server
+CMD alembic upgrade head && \
+    uvicorn app.main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 4 \
+    --log-level info
+```
+
+Docker Compose configuration:
+
+```yaml docker-compose.yml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=expireeye
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=expireeye
+      - SECRET_KEY=${SECRET_KEY}
+      - NUTRITION_API_KEY=${NUTRITION_API_KEY}
+      - cloud_name=${CLOUDINARY_CLOUD_NAME}
+      - api_key=${CLOUDINARY_API_KEY}
+      - api_secret=${CLOUDINARY_API_SECRET}
+    depends_on:
+      - mysql
+    restart: unless-stopped
+    volumes:
+      - uploads:/app/uploads
+    
+  mysql:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=expireeye
+      - MYSQL_USER=expireeye
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+
+volumes:
+  mysql_data:
+  uploads:
+```
+
+### Cloud Platform Deployments
+
+<CodeGroup>
+```bash AWS EC2
+# Install dependencies
+sudo apt update
+sudo apt install python3-pip python3-venv nginx
+
+# Clone and setup
+git clone https://github.com/your-repo/ExpireEye-backend.git
+cd ExpireEye-backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+nano .env  # Update with production values
+
+# Run migrations
+alembic upgrade head
+
+# Setup systemd service
+sudo cp expireeye.service /etc/systemd/system/
+sudo systemctl enable expireeye
+sudo systemctl start expireeye
+```
+
+```bash Heroku
+# Install Heroku CLI and login
+heroku login
+
+# Create app
+heroku create expireeye-api
+
+# Add MySQL addon
+heroku addons:create jawsdb:kitefin
+
+# Set environment variables
+heroku config:set ENV=production
+heroku config:set SECRET_KEY=your_secret_key
+heroku config:set NUTRITION_API_KEY=your_api_key
+
+# Create Procfile
+echo "web: uvicorn app.main:app --host 0.0.0.0 --port \$PORT --workers 4" > Procfile
+
+# Deploy
+git push heroku main
+```
+
+```bash DigitalOcean App Platform
+# Create app.yaml
+spec_version: v2
+name: expireeye-api
+services:
+  - name: api
+    github:
+      repo: your-username/ExpireEye-backend
+      branch: main
+    build_command: pip install -r requirements.txt
+    run_command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 4
+    envs:
+      - key: ENV
+        value: production
+      - key: SECRET_KEY
+        value: ${SECRET_KEY}
+    http_port: 8080
+databases:
+  - name: mysql-db
+    engine: MYSQL
+    version: "8"
+```
+</CodeGroup>
+
+## Monitoring and Logging
+
+### Application Logging
+
+Configure structured logging:
+
+```python app/main.py
+import logging
+import json
+from datetime import datetime
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/var/log/expireeye/app.log'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+
+# Add request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = datetime.now()
+    response = await call_next(request)
+    duration = (datetime.now() - start_time).total_seconds()
+    
+    logger.info(json.dumps({
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": response.status_code,
+        "duration": duration,
+        "client": request.client.host if request.client else None
+    }))
+    
+    return response
+```
+
+### Health Check Endpoint
+
+The application includes a status endpoint:
+
+```python app/main.py
+@app.get("/status", tags=["Status"])
+def status():
+    return {"status": "OK", "message": "Server Is Running"}
+```
+
+Enhance for production:
+
+```python
+from sqlalchemy import text
+from app.db.session import engine
+
+@app.get("/health")
+async def health_check():
+    checks = {
+        "api": "healthy",
+        "database": "unknown",
+        "scheduler": "unknown"
+    }
+    
+    # Check database
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        checks["database"] = "healthy"
+    except Exception as e:
+        checks["database"] = f"unhealthy: {str(e)}"
+    
+    # Check scheduler
+    checks["scheduler"] = "healthy" if scheduler.running else "stopped"
+    
+    status_code = 200 if all(v == "healthy" for v in checks.values()) else 503
+    return JSONResponse(status_code=status_code, content=checks)
+```
+
+## Performance Optimization
+
+### Caching Strategy
+
+Implement caching for frequently accessed data:
+
+```python
+from functools import lru_cache
+from fastapi import Depends
+from cachetools import TTLCache
+
+# In-memory cache with TTL
+product_cache = TTLCache(maxsize=1000, ttl=300)
+
+@lru_cache(maxsize=128)
+def get_nutrition_data(product_id: int):
+    # Cache nutrition API responses
+    pass
+```
+
+### Database Query Optimization
+
+1. Use `joinedload()` for related data
+2. Add indexes on frequently queried columns
+3. Use database-level pagination
+4. Implement read replicas for heavy read workloads
+
+## Backup and Disaster Recovery
+
+### Automated Database Backups
+
+```bash backup.sh
+#!/bin/bash
+BACKUP_DIR="/var/backups/expireeye"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/expireeye_$TIMESTAMP.sql"
+
+# Create backup
+mysqldump -u $DB_USER -p$DB_PASSWORD $DB_NAME | gzip > "$BACKUP_FILE.gz"
+
+# Keep only last 7 days of backups
+find $BACKUP_DIR -name "*.sql.gz" -mtime +7 -delete
+
+echo "Backup completed: $BACKUP_FILE.gz"
+```
+
+Add to crontab:
+
+```bash
+# Daily backup at 3 AM
+0 3 * * * /opt/expireeye/backup.sh >> /var/log/expireeye/backup.log 2>&1
+```
+
+## Next Steps
+
+After deployment:
+
+1. Monitor application logs and metrics
+2. Set up alerting for errors and performance issues
+3. Configure automated backups
+4. Implement CI/CD pipeline for automated deployments
+5. Perform load testing to validate configuration
+
+## Additional Resources
+
+- [FastAPI Deployment](https://fastapi.tiangolo.com/deployment/)
+- [Uvicorn Deployment](https://www.uvicorn.org/deployment/)
+- [APScheduler Documentation](https://apscheduler.readthedocs.io/)
+- [MySQL Production Best Practices](https://dev.mysql.com/doc/refman/8.0/en/optimization.html)

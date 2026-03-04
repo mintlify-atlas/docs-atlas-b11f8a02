@@ -1,0 +1,301 @@
+---
+title: "Get Statistics Overview"
+api: "GET /api/stats/expired-products"
+description: "Retrieve an overview of expired products grouped by date"
+---
+
+## Overview
+
+This endpoint provides statistics about expired products, showing the count of expired items grouped by their expiry date. This is useful for analyzing waste patterns and understanding which dates had the most product expirations.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer YOUR_ACCESS_TOKEN`
+</ParamField>
+
+## Response
+
+The endpoint returns an array of objects, each representing a specific date and the count of products that expired on that date.
+
+<ResponseField name="date" type="string">
+  The expiry date in `YYYY-MM-DD` format
+</ResponseField>
+
+<ResponseField name="expired_count" type="integer">
+  Number of products that expired on this date
+</ResponseField>
+
+## Response Examples
+
+### Success
+
+```json
+[
+  {
+    "date": "2026-03-01",
+    "expired_count": 5
+  },
+  {
+    "date": "2026-03-02",
+    "expired_count": 3
+  },
+  {
+    "date": "2026-03-03",
+    "expired_count": 8
+  },
+  {
+    "date": "2026-03-04",
+    "expired_count": 2
+  }
+]
+```
+
+### Empty Result
+
+If no expired products exist, an empty array is returned:
+
+```json
+[]
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Authentication failed or missing authorization header.
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X GET "https://api.expireeye.com/api/stats/expired-products" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const accessToken = "your-jwt-token";
+
+fetch("https://api.expireeye.com/api/stats/expired-products", {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => response.json())
+  .then(data => {
+    console.log(`Total dates with expirations: ${data.length}`);
+    
+    // Calculate total expired products
+    const totalExpired = data.reduce((sum, item) => sum + item.expired_count, 0);
+    console.log(`Total expired products: ${totalExpired}`);
+    
+    // Find date with most expirations
+    if (data.length > 0) {
+      const maxExpiry = data.reduce((max, item) => 
+        item.expired_count > max.expired_count ? item : max
+      );
+      console.log(`Most expirations on: ${maxExpiry.date} (${maxExpiry.expired_count} items)`);
+    }
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Python (Requests)
+
+```python
+import requests
+from datetime import datetime
+
+access_token = "your-jwt-token"
+url = "https://api.expireeye.com/api/stats/expired-products"
+
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+response = requests.get(url, headers=headers)
+
+if response.status_code == 200:
+    data = response.json()
+    
+    if data:
+        total_expired = sum(item["expired_count"] for item in data)
+        print(f"Total expired products: {total_expired}")
+        
+        # Print by date
+        print("\nExpired products by date:")
+        for item in data:
+            date_obj = datetime.strptime(item["date"], "%Y-%m-%d")
+            formatted_date = date_obj.strftime("%B %d, %Y")
+            print(f"  {formatted_date}: {item['expired_count']} items")
+    else:
+        print("No expired products found")
+else:
+    print(f"Error: {response.status_code}")
+```
+
+### TypeScript (Axios)
+
+```typescript
+import axios from 'axios';
+
+interface ExpiredProductItem {
+  date: string;
+  expired_count: number;
+}
+
+async function getExpiredProductsStats(accessToken: string): Promise<void> {
+  try {
+    const response = await axios.get<ExpiredProductItem[]>(
+      'https://api.expireeye.com/api/stats/expired-products',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    const stats = response.data;
+    
+    if (stats.length === 0) {
+      console.log('No expired products found');
+      return;
+    }
+
+    // Calculate statistics
+    const totalExpired = stats.reduce((sum, item) => sum + item.expired_count, 0);
+    const avgPerDay = totalExpired / stats.length;
+    
+    console.log(`Total expired products: ${totalExpired}`);
+    console.log(`Average per day: ${avgPerDay.toFixed(2)}`);
+    console.log(`Date range: ${stats[0].date} to ${stats[stats.length - 1].date}`);
+    
+    // Find peak expiry date
+    const peakDay = stats.reduce((max, item) => 
+      item.expired_count > max.expired_count ? item : max
+    );
+    console.log(`Peak expiry: ${peakDay.date} with ${peakDay.expired_count} items`);
+  } catch (error) {
+    console.error('Failed to fetch expired products stats:', error);
+  }
+}
+```
+
+### Chart Visualization Example (React + Chart.js)
+
+```typescript
+import { useEffect, useState } from 'react';
+import { Line } from 'react-chartjs-2';
+import axios from 'axios';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+interface ExpiredProductItem {
+  date: string;
+  expired_count: number;
+}
+
+function ExpiredProductsChart({ accessToken }: { accessToken: string }) {
+  const [chartData, setChartData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    axios
+      .get<ExpiredProductItem[]>(
+        'https://api.expireeye.com/api/stats/expired-products',
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+      .then(response => {
+        const data = response.data;
+        
+        setChartData({
+          labels: data.map(item => item.date),
+          datasets: [
+            {
+              label: 'Expired Products',
+              data: data.map(item => item.expired_count),
+              borderColor: 'rgb(255, 99, 132)',
+              backgroundColor: 'rgba(255, 99, 132, 0.5)',
+              tension: 0.1,
+            },
+          ],
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [accessToken]);
+
+  if (loading) return <div>Loading chart...</div>;
+  if (!chartData) return <div>No data available</div>;
+
+  return (
+    <Line
+      data={chartData}
+      options={{
+        responsive: true,
+        plugins: {
+          legend: {
+            position: 'top',
+          },
+          title: {
+            display: true,
+            text: 'Expired Products Over Time',
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+            },
+          },
+        },
+      }}
+    />
+  );
+}
+```
+
+## Use Cases
+
+1. **Waste Analysis Dashboard:** Display historical waste patterns to identify problematic periods
+2. **Trend Visualization:** Create line charts showing expiry trends over time
+3. **Monthly Reports:** Generate monthly waste reports by aggregating daily data
+4. **Peak Identification:** Identify dates with unusually high expiration rates for investigation
+5. **Inventory Optimization:** Use historical data to optimize purchase quantities and timing
+
+## Notes
+
+- Results are ordered by date (ascending)
+- Only products with status `expired` are included in the count
+- Dates are based on the `expiryDate` field from the user products table
+- The endpoint aggregates all expired products regardless of category or type

@@ -1,0 +1,146 @@
+---
+title: "List Products"
+api: "GET /api/product/inventory/list"
+description: "Retrieve a list of products from the inventory"
+---
+
+## Endpoint
+
+```
+GET /api/product/inventory/list
+```
+
+This endpoint retrieves a list of all products in the inventory database. You can optionally filter the results by product name.
+
+## Query Parameters
+
+<ParamField query="name" type="string">
+  Filter products by name. Returns products that match the provided name.
+</ParamField>
+
+## Response
+
+The endpoint returns a list of products with their details including nutrition information if available.
+
+<ResponseField name="products" type="array">
+  Array of product objects
+  
+  <ResponseField name="id" type="string">
+    Unique identifier of the product
+  </ResponseField>
+  
+  <ResponseField name="name" type="string">
+    Name of the product
+  </ResponseField>
+  
+  <ResponseField name="category" type="string">
+    Category of the product
+  </ResponseField>
+  
+  <ResponseField name="barcode" type="string">
+    Barcode identifier for the product
+  </ResponseField>
+  
+  <ResponseField name="nutrition" type="object" optional>
+    Nutrition information for the product
+    
+    <ResponseField name="energy_kcal" type="string">
+      Energy content in kilocalories
+    </ResponseField>
+    
+    <ResponseField name="carbohydrate" type="string">
+      Carbohydrate content
+    </ResponseField>
+    
+    <ResponseField name="protein" type="string">
+      Protein content
+    </ResponseField>
+    
+    <ResponseField name="fiber" type="string">
+      Fiber content
+    </ResponseField>
+    
+    <ResponseField name="total_sugars" type="string">
+      Total sugar content
+    </ResponseField>
+    
+    <ResponseField name="saturated_fat" type="string">
+      Saturated fat content
+    </ResponseField>
+    
+    <ResponseField name="vitamin_a" type="string">
+      Vitamin A content
+    </ResponseField>
+    
+    <ResponseField name="vitamin_c" type="string">
+      Vitamin C content
+    </ResponseField>
+    
+    <ResponseField name="potassium" type="string">
+      Potassium content
+    </ResponseField>
+    
+    <ResponseField name="iron" type="string">
+      Iron content
+    </ResponseField>
+    
+    <ResponseField name="calcium" type="string">
+      Calcium content
+    </ResponseField>
+    
+    <ResponseField name="sodium" type="string">
+      Sodium content
+    </ResponseField>
+    
+    <ResponseField name="cholesterol" type="string">
+      Cholesterol content
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+# Get all products
+curl -X GET https://api.expireeye.com/api/product/inventory/list
+
+# Filter products by name
+curl -X GET "https://api.expireeye.com/api/product/inventory/list?name=Milk"
+```
+
+## Example Response
+
+```json
+{
+  "products": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Organic Milk",
+      "category": "Dairy",
+      "barcode": "123456789012",
+      "nutrition": {
+        "energy_kcal": "150",
+        "carbohydrate": "12g",
+        "protein": "8g",
+        "fiber": "0g",
+        "total_sugars": "12g",
+        "saturated_fat": "5g",
+        "vitamin_a": "10%",
+        "vitamin_c": "0%",
+        "potassium": "350mg",
+        "iron": "0mg",
+        "calcium": "300mg",
+        "sodium": "120mg",
+        "cholesterol": "20mg"
+      }
+    },
+    {
+      "id": "660e8400-e29b-41d4-a716-446655440001",
+      "name": "Whole Wheat Bread",
+      "category": "Bakery",
+      "barcode": "987654321098",
+      "nutrition": null
+    }
+  ]
+}
+```

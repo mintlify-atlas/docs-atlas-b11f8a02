@@ -1,0 +1,222 @@
+---
+title: "WebSocket Notification Connection"
+api: "WS /api/ws/notification"
+description: "Establish a WebSocket connection to receive real-time notifications"
+---
+
+## Overview
+
+The WebSocket notification endpoint enables real-time, bidirectional communication between the client and server for receiving notifications about product expiry and other events. Once connected, the server can push notifications to the client without requiring polling.
+
+<Note>
+  WebSocket connections require authentication via the `access_token` query parameter. The connection will be automatically closed if authentication fails.
+</Note>
+
+## Connection URL
+
+```
+ws://your-domain/api/ws/notification?access_token=YOUR_ACCESS_TOKEN
+```
+
+## Authentication
+
+<ParamField query="access_token" type="string" required>
+  JWT access token for authenticating the WebSocket connection. Pass this as a query parameter in the connection URL.
+</ParamField>
+
+## Connection Flow
+
+### 1. Establishing Connection
+
+When you connect to the WebSocket, you'll receive a confirmation message:
+
+<ResponseField name="type" type="string">
+  Message type: `CONNECTION_ESTABLISHED`
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message: "Notification WebSocket connected"
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  The authenticated user's ID extracted from the access token
+</ResponseField>
+
+**Example Connection Response:**
+```json
+{
+  "type": "CONNECTION_ESTABLISHED",
+  "message": "Notification WebSocket connected",
+  "userId": "user-uuid-here"
+}
+```
+
+### 2. Receiving Notifications
+
+Once connected, the server will push notifications to the client in real-time. Notifications follow this structure:
+
+<ResponseField name="id" type="string">
+  Unique notification ID
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable notification message
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Notification type: `info`, `warning`, or `error`
+</ResponseField>
+
+<ResponseField name="productName" type="string">
+  Name of the product related to the notification
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the notification was created
+</ResponseField>
+
+**Example Notification:**
+```json
+{
+  "id": "notif-uuid-123",
+  "message": "Product expires in 2 days",
+  "type": "warning",
+  "productName": "Organic Milk",
+  "created_at": "2026-03-04T10:30:00"
+}
+```
+
+### 3. Client-to-Server Messages
+
+Clients can send messages to the server for various actions:
+
+#### Mark Notification as Read
+
+```json
+{
+  "action": "mark_read",
+  "id": "notification-id"
+}
+```
+
+#### Ping (Keep-Alive)
+
+Send the string `"PING"` to receive a pong response:
+
+**Response:**
+```json
+{
+  "type": "pong"
+}
+```
+
+<Note>
+  Regular ping messages can help keep the connection alive and detect disconnections.
+</Note>
+
+## Error Handling
+
+### Authentication Failure
+
+If no access token is provided, the connection will be closed immediately with:
+- **Code:** 1008 (Policy Violation)
+- **Reason:** "Access token required"
+
+### Disconnection
+
+The WebSocket connection may be closed due to:
+- Network issues
+- Server shutdown
+- Client disconnection
+- Authentication token expiration
+
+The server will automatically clean up the connection and remove the user from the active connections pool.
+
+## Example Usage
+
+### JavaScript/TypeScript
+
+```javascript
+// Establish WebSocket connection
+const accessToken = "your-jwt-token";
+const ws = new WebSocket(`ws://localhost:8000/api/ws/notification?access_token=${accessToken}`);
+
+// Connection opened
+ws.onopen = (event) => {
+  console.log("WebSocket connected");
+};
+
+// Listen for messages
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  
+  if (data.type === "CONNECTION_ESTABLISHED") {
+    console.log("Connected as user:", data.userId);
+  } else {
+    // Handle notification
+    console.log("New notification:", data);
+    
+    // Mark as read
+    ws.send(JSON.stringify({
+      action: "mark_read",
+      id: data.id
+    }));
+  }
+};
+
+// Handle errors
+ws.onerror = (error) => {
+  console.error("WebSocket error:", error);
+};
+
+// Connection closed
+ws.onclose = (event) => {
+  console.log("WebSocket closed:", event.code, event.reason);
+};
+
+// Keep-alive ping (every 30 seconds)
+setInterval(() => {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send("PING");
+  }
+}, 30000);
+```
+
+### Python
+
+```python
+import asyncio
+import websockets
+import json
+
+async def connect_notifications(access_token):
+    uri = f"ws://localhost:8000/api/ws/notification?access_token={access_token}"
+    
+    async with websockets.connect(uri) as websocket:
+        # Receive connection confirmation
+        response = await websocket.recv()
+        print(f"Connected: {response}")
+        
+        # Listen for notifications
+        async for message in websocket:
+            data = json.loads(message)
+            print(f"Notification received: {data}")
+            
+            # Mark as read
+            if "id" in data:
+                await websocket.send(json.dumps({
+                    "action": "mark_read",
+                    "id": data["id"]
+                }))
+
+# Run the client
+asyncio.run(connect_notifications("your-jwt-token"))
+```
+
+## Best Practices
+
+1. **Reconnection Logic:** Implement automatic reconnection with exponential backoff for production applications
+2. **Keep-Alive:** Send periodic PING messages to maintain the connection
+3. **Error Handling:** Always handle connection errors and unexpected disconnections gracefully
+4. **Token Refresh:** Monitor token expiration and reconnect with a fresh token when needed
+5. **Message Acknowledgment:** Mark notifications as read to prevent duplicate processing

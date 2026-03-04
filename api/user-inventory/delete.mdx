@@ -1,0 +1,120 @@
+---
+title: "Delete Product from Inventory"
+api: "DELETE /api/product/user/delete/{product_id}"
+description: "Remove a product from the user's inventory"
+---
+
+## Overview
+
+This endpoint allows authenticated users to permanently remove a product from their inventory. Once deleted, the product entry is completely removed from the user's inventory database.
+
+## Authentication
+
+This endpoint requires authentication. The user's access token must be included in the request and contains the `userId` extracted from `request.state.user`.
+
+## Request
+
+### Path Parameters
+
+<ParamField path="product_id" type="string" required>
+  The unique identifier of the product to delete from the inventory.
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message confirming the product was removed from inventory.
+</ResponseField>
+
+## Examples
+
+### Delete a Product
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://api.expireeye.com/api/product/user/delete/prod_123abc" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```json Response
+{
+  "message": "Product removed from user inventory successfully."
+}
+```
+</CodeGroup>
+
+### Delete Multiple Products
+
+To delete multiple products, make separate DELETE requests:
+
+<CodeGroup>
+```bash cURL
+# Delete first product
+curl -X DELETE "https://api.expireeye.com/api/product/user/delete/prod_123abc" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Delete second product
+curl -X DELETE "https://api.expireeye.com/api/product/user/delete/prod_456def" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Delete third product
+curl -X DELETE "https://api.expireeye.com/api/product/user/delete/prod_789ghi" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+</CodeGroup>
+
+## Error Responses
+
+### Product Not Found
+
+```json
+{
+  "detail": "Product with ID prod_999xyz does not exist in user inventory."
+}
+```
+
+**Status Code:** 404
+
+**Note:** This error occurs when:
+- The product ID doesn't exist in the database
+- The product doesn't belong to the authenticated user
+- The product was already deleted
+
+## Validation Rules
+
+1. **Product Ownership**: The endpoint verifies that the product belongs to the authenticated user before allowing deletion. Users cannot delete products from other users' inventories.
+
+2. **Product Existence**: The endpoint checks if the product exists in the user's inventory before attempting deletion.
+
+3. **Permanent Deletion**: This operation permanently removes the product entry from the database. It cannot be undone.
+
+## Behavior Notes
+
+- **Permanent Operation**: Deletion is permanent and cannot be reversed. The product data is completely removed from the user's inventory.
+
+- **Product vs UserProduct**: This endpoint deletes the user's inventory entry (UserProduct), not the master product record (Product). The product remains available in the master product catalog for other users.
+
+- **Cascade Effects**: Deleting a product may affect:
+  - Related notifications for that product
+  - Analytics and usage statistics
+  - Any scheduled expiry alerts
+
+- **No Soft Delete**: The system performs a hard delete. There is no "archived" or "inactive" status - the record is completely removed.
+
+## Use Cases
+
+- Remove products that have been consumed
+- Clean up expired products
+- Correct mistakes from duplicate entries
+- Remove products that were added by error
+- Clear out products during inventory cleanup
+
+## Best Practices
+
+1. **Confirm Before Delete**: Implement a confirmation dialog in your UI before calling this endpoint, as the operation is irreversible.
+
+2. **Batch Operations**: If you need to delete multiple products (e.g., all expired items), make individual DELETE requests for each product.
+
+3. **Error Handling**: Handle 404 errors gracefully - the product may have already been deleted in a previous operation or by another client.
+
+4. **Audit Trail**: Consider logging deletion events in your application for audit purposes, as the backend permanently removes the data.

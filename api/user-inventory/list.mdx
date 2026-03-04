@@ -1,0 +1,253 @@
+---
+title: "List User Inventory"
+api: "GET /api/product/user/list"
+description: "Retrieve all products in the authenticated user's inventory"
+---
+
+## Overview
+
+This endpoint returns a list of all products in the authenticated user's inventory, ordered by most recently added first. Each product includes detailed information such as category, expiry date, nutrition data, and status.
+
+## Authentication
+
+This endpoint requires authentication. The user's access token must be included in the request and contains the `userId` extracted from `request.state.user`.
+
+## Request
+
+No parameters required. The user ID is automatically extracted from the authentication token.
+
+## Response
+
+<ResponseField name="products" type="array">
+  Array of products in the user's inventory.
+
+  <Expandable title="Product Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the product.
+    </ResponseField>
+
+    <ResponseField name="name" type="string">
+      Name of the product.
+    </ResponseField>
+
+    <ResponseField name="category" type="string">
+      Category of the product (e.g., "Dairy", "Bakery", "Uncategorized").
+    </ResponseField>
+
+    <ResponseField name="quantity" type="integer">
+      Current quantity of the product in inventory.
+    </ResponseField>
+
+    <ResponseField name="expiryDate" type="string">
+      ISO 8601 formatted expiry date of the product.
+    </ResponseField>
+
+    <ResponseField name="status" type="string">
+      Status of the product (e.g., "active").
+    </ResponseField>
+
+    <ResponseField name="notes" type="string">
+      Additional notes about the product.
+    </ResponseField>
+
+    <ResponseField name="addedAt" type="string">
+      ISO 8601 formatted timestamp when the product was added.
+    </ResponseField>
+
+    <ResponseField name="updatedAt" type="string">
+      ISO 8601 formatted timestamp when the product was last updated.
+    </ResponseField>
+
+    <ResponseField name="nutrition" type="object" optional>
+      Nutrition information for the product. May be null if nutrition data is unavailable.
+
+      <Expandable title="Nutrition Object">
+        <ResponseField name="energy_kcal" type="string">
+          Energy content in kilocalories.
+        </ResponseField>
+
+        <ResponseField name="carbohydrate" type="string">
+          Carbohydrate content.
+        </ResponseField>
+
+        <ResponseField name="protein" type="string">
+          Protein content.
+        </ResponseField>
+
+        <ResponseField name="fiber" type="string">
+          Dietary fiber content.
+        </ResponseField>
+
+        <ResponseField name="total_sugars" type="string">
+          Total sugar content.
+        </ResponseField>
+
+        <ResponseField name="saturated_fat" type="string">
+          Saturated fat content.
+        </ResponseField>
+
+        <ResponseField name="vitamin_a" type="string">
+          Vitamin A content.
+        </ResponseField>
+
+        <ResponseField name="vitamin_c" type="string">
+          Vitamin C content.
+        </ResponseField>
+
+        <ResponseField name="potassium" type="string">
+          Potassium content.
+        </ResponseField>
+
+        <ResponseField name="iron" type="string">
+          Iron content.
+        </ResponseField>
+
+        <ResponseField name="calcium" type="string">
+          Calcium content.
+        </ResponseField>
+
+        <ResponseField name="sodium" type="string">
+          Sodium content.
+        </ResponseField>
+
+        <ResponseField name="cholesterol" type="string">
+          Cholesterol content.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Get User Inventory
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.expireeye.com/api/product/user/list" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```json Response
+{
+  "products": [
+    {
+      "id": "prod_123abc",
+      "name": "Organic Milk",
+      "category": "Dairy",
+      "quantity": 2,
+      "expiryDate": "2026-03-10T00:00:00.000Z",
+      "status": "active",
+      "notes": "Store in refrigerator",
+      "addedAt": "2026-03-04T10:30:00.000Z",
+      "updatedAt": "2026-03-04T10:30:00.000Z",
+      "nutrition": {
+        "energy_kcal": "61",
+        "carbohydrate": "4.8g",
+        "protein": "3.2g",
+        "fiber": "0g",
+        "total_sugars": "5.1g",
+        "saturated_fat": "1.5g",
+        "vitamin_a": "46mcg",
+        "vitamin_c": "0mg",
+        "potassium": "150mg",
+        "iron": "0.03mg",
+        "calcium": "113mg",
+        "sodium": "43mg",
+        "cholesterol": "10mg"
+      }
+    },
+    {
+      "id": "prod_456def",
+      "name": "Whole Wheat Bread",
+      "category": "Bakery",
+      "quantity": 1,
+      "expiryDate": "2026-03-08T00:00:00.000Z",
+      "status": "active",
+      "notes": "Scanned Via Barcode with Code 7890123456",
+      "addedAt": "2026-03-03T15:20:00.000Z",
+      "updatedAt": "2026-03-03T15:20:00.000Z",
+      "nutrition": {
+        "energy_kcal": "247",
+        "carbohydrate": "41g",
+        "protein": "13g",
+        "fiber": "7g",
+        "total_sugars": "6g",
+        "saturated_fat": "0.8g",
+        "vitamin_a": "0mcg",
+        "vitamin_c": "0mg",
+        "potassium": "248mg",
+        "iron": "2.5mg",
+        "calcium": "163mg",
+        "sodium": "443mg",
+        "cholesterol": "0mg"
+      }
+    },
+    {
+      "id": "prod_789ghi",
+      "name": "Fresh Tomatoes",
+      "category": "Vegetables",
+      "quantity": 5,
+      "expiryDate": "2026-03-07T00:00:00.000Z",
+      "status": "active",
+      "notes": "",
+      "addedAt": "2026-03-02T08:15:00.000Z",
+      "updatedAt": "2026-03-04T09:00:00.000Z",
+      "nutrition": null
+    }
+  ]
+}
+```
+</CodeGroup>
+
+### Empty Inventory
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.expireeye.com/api/product/user/list" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```json Response
+{
+  "products": []
+}
+```
+</CodeGroup>
+
+## Response Details
+
+### Product Ordering
+
+Products are returned in descending order by `addedAt` timestamp, meaning the most recently added products appear first in the list.
+
+### Unknown Products
+
+If a product in the user's inventory references a product ID that no longer exists in the main product database, the response will include:
+
+```json
+{
+  "id": "prod_unknown",
+  "name": "Unknown Product",
+  "category": "Unknown Category",
+  "expiryDate": "2026-03-10T00:00:00.000Z",
+  "nutrition": null,
+  "addedAt": "2026-03-01T12:00:00.000Z",
+  "status": "active",
+  "notes": "",
+  "updatedAt": "2026-03-01T12:00:00.000Z"
+}
+```
+
+### Nutrition Data
+
+The `nutrition` field may be `null` if:
+- The product doesn't have associated nutrition information in the database
+- The product is marked as "Unknown Product"
+
+## Use Cases
+
+- Display user's inventory on dashboard
+- Check expiring products
+- View nutrition information for meal planning
+- Track product quantities for shopping lists

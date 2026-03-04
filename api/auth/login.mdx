@@ -1,0 +1,114 @@
+---
+title: Login
+description: Authenticate a user and receive a JWT access token
+---
+
+# Login
+
+Authenticates a user with their email and password credentials. Upon successful authentication, returns a JWT access token and sets it as an HTTP-only cookie.
+
+## Endpoint
+
+```
+POST /api/auth/login
+```
+
+## Request Body
+
+<ParamField path="email" type="string" required>
+  User's email address. Must be a valid email format.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  User's password.
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message indicating login was successful.
+</ResponseField>
+
+<ResponseField name="token" type="string">
+  JWT access token for authenticated requests. This token contains the user's ID and email.
+</ResponseField>
+
+<Note>
+The access token is also automatically set as an HTTP-only cookie named `access_token` with the following properties:
+- **HttpOnly**: true (prevents JavaScript access)
+- **SameSite**: lax
+- **Path**: /
+- **Domain**: localhost
+- **Max-Age**: 10 days (864000 seconds)
+</Note>
+
+## Example Request
+
+```bash
+curl -X POST https://api.expireeye.com/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "yourpassword123"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "message": "Login successful",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+Returned when the email or password is invalid.
+
+```json
+{
+  "detail": "Invalid email or password"
+}
+```
+
+### 400 Bad Request
+
+Returned when required fields are missing.
+
+```json
+{
+  "detail": "Email is required"
+}
+```
+
+```json
+{
+  "detail": "Password is required"
+}
+```
+
+### 500 Internal Server Error
+
+Returned when a database or server error occurs.
+
+```json
+{
+  "detail": "Internal server error"
+}
+```
+
+## JWT Token Payload
+
+The JWT token contains the following claims:
+
+- `userId`: The user's unique identifier
+- `email`: The user's email address
+
+Use this token in the `Authorization` header for authenticated requests:
+
+```
+Authorization: Bearer <token>
+```

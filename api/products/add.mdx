@@ -1,0 +1,85 @@
+---
+title: "Add Product"
+api: "POST /api/product/inventory/add"
+description: "Add a new product to the inventory database"
+---
+
+<Warning>
+  This endpoint requires authentication. Include a valid Bearer token in the Authorization header.
+</Warning>
+
+## Endpoint
+
+```
+POST /api/product/inventory/add
+```
+
+This endpoint adds a new product to the inventory database. The product information includes the product name and category.
+
+## Request Body
+
+<ParamField body="productName" type="string" required>
+  The name of the product to add to the inventory
+</ParamField>
+
+<ParamField body="category" type="string" required>
+  The category of the product (e.g., "Dairy", "Vegetables", "Beverages")
+</ParamField>
+
+<ParamField body="barcode" type="string">
+  Optional barcode identifier for the product
+</ParamField>
+
+## Authentication
+
+This endpoint requires a valid JWT Bearer token. The token should be included in the Authorization header:
+
+```
+Authorization: Bearer <your_access_token>
+```
+
+The user ID is extracted from the JWT token to associate the product with the user.
+
+## Response
+
+The response structure depends on the implementation of the `add_product_to_inventory` service function.
+
+<ResponseField name="message" type="string">
+  Status message indicating the result of the operation
+</ResponseField>
+
+<ResponseField name="productId" type="string">
+  The unique identifier of the newly created product
+</ResponseField>
+
+<ResponseField name="productName" type="string">
+  The name of the product that was added
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  The category of the product that was added
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://api.expireeye.com/api/product/inventory/add \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -d '{
+    "productName": "Organic Milk",
+    "category": "Dairy",
+    "barcode": "123456789012"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "message": "Product added successfully",
+  "productId": "550e8400-e29b-41d4-a716-446655440000",
+  "productName": "Organic Milk",
+  "category": "Dairy"
+}
+```

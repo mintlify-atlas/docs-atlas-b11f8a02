@@ -1,0 +1,273 @@
+---
+title: "Get User Profile"
+api: "GET /api/user/profile"
+description: "Retrieve the authenticated user's profile information"
+---
+
+## Overview
+
+This endpoint returns the profile information for the currently authenticated user, including personal details and account metadata.
+
+## Authentication
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token for authentication. Format: `Bearer YOUR_ACCESS_TOKEN`
+</ParamField>
+
+The user ID is automatically extracted from the JWT access token in the Authorization header.
+
+## Response
+
+<ResponseField name="id" type="string">
+  Unique user ID (UUID)
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  User's full name
+</ResponseField>
+
+<ResponseField name="dob" type="string">
+  User's date of birth (format may vary)
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User's email address
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp when the account was created
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  ISO 8601 timestamp when the account was last updated
+</ResponseField>
+
+## Response Examples
+
+### Success
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "John Doe",
+  "dob": "1990-05-15",
+  "email": "john.doe@example.com",
+  "createdAt": "2025-01-15T08:30:00",
+  "updatedAt": "2026-03-01T14:20:00"
+}
+```
+
+## Error Responses
+
+### 401 Unauthorized
+
+The access token is missing, invalid, or the user ID could not be extracted.
+
+```json
+{
+  "detail": "Unauthorized"
+}
+```
+
+### 401 Missing Authorization Header
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+### 404 User Not Found
+
+The user ID from the token does not match any user in the database.
+
+```json
+{
+  "detail": "User not found"
+}
+```
+
+## Example Requests
+
+### cURL
+
+```bash
+curl -X GET "https://api.expireeye.com/api/user/profile" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### JavaScript (Fetch)
+
+```javascript
+const accessToken = "your-jwt-token";
+
+fetch("https://api.expireeye.com/api/user/profile", {
+  method: "GET",
+  headers: {
+    "Authorization": `Bearer ${accessToken}`,
+  },
+})
+  .then(response => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+  })
+  .then(profile => {
+    console.log("User Profile:");
+    console.log(`Name: ${profile.name}`);
+    console.log(`Email: ${profile.email}`);
+    console.log(`Member since: ${new Date(profile.createdAt).toLocaleDateString()}`);
+  })
+  .catch(error => console.error("Error:", error));
+```
+
+### Python (Requests)
+
+```python
+import requests
+
+access_token = "your-jwt-token"
+url = "https://api.expireeye.com/api/user/profile"
+
+headers = {
+    "Authorization": f"Bearer {access_token}"
+}
+
+response = requests.get(url, headers=headers)
+
+if response.status_code == 200:
+    profile = response.json()
+    print(f"User Profile:")
+    print(f"Name: {profile['name']}")
+    print(f"Email: {profile['email']}")
+    print(f"DOB: {profile['dob']}")
+    print(f"Account created: {profile['createdAt']}")
+elif response.status_code == 401:
+    print("Authentication failed")
+elif response.status_code == 404:
+    print("User not found")
+else:
+    print(f"Error: {response.status_code}")
+```
+
+### TypeScript (Axios)
+
+```typescript
+import axios from 'axios';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  dob: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+async function getUserProfile(accessToken: string): Promise<UserProfile | null> {
+  try {
+    const response = await axios.get<UserProfile>(
+      'https://api.expireeye.com/api/user/profile',
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    console.log('Profile loaded:', response.data.name);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 401) {
+        console.error('Authentication failed');
+      } else if (error.response?.status === 404) {
+        console.error('User not found');
+      }
+    }
+    return null;
+  }
+}
+
+// Usage
+const profile = await getUserProfile('your-jwt-token');
+if (profile) {
+  console.log(`Welcome, ${profile.name}!`);
+}
+```
+
+### React Hook Example
+
+```typescript
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+interface UserProfile {
+  id: string;
+  name: string;
+  dob: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+function useUserProfile(accessToken: string | null) {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) {
+      setLoading(false);
+      return;
+    }
+
+    axios
+      .get<UserProfile>('https://api.expireeye.com/api/user/profile', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+      .then(response => {
+        setProfile(response.data);
+        setError(null);
+      })
+      .catch(err => {
+        setError(err.response?.data?.detail || 'Failed to load profile');
+        setProfile(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [accessToken]);
+
+  return { profile, loading, error };
+}
+
+// Component usage
+function ProfilePage() {
+  const accessToken = localStorage.getItem('accessToken');
+  const { profile, loading, error } = useUserProfile(accessToken);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error}</div>;
+  if (!profile) return <div>No profile data</div>;
+
+  return (
+    <div>
+      <h1>{profile.name}</h1>
+      <p>Email: {profile.email}</p>
+      <p>Date of Birth: {profile.dob}</p>
+    </div>
+  );
+}
+```
+
+## Notes
+
+- This endpoint only returns the profile of the authenticated user (no ability to query other users)
+- The user ID is extracted from the JWT token automatically on the server side
+- Profile information is read-only through this endpoint
+- For updating profile information, use the appropriate update endpoint (if available)
+- The `dob` field format may vary depending on how it was stored during registration

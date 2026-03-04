@@ -1,0 +1,630 @@
+---
+title: Database architecture
+description: Database schema design, SQLAlchemy models, relationships, and Alembic migrations for the ExpireEye backend
+---
+
+ExpireEye uses SQLAlchemy ORM with MySQL as the database backend. The schema is designed to track users, products, inventory, nutrition information, notifications, and scan history.
+
+## Database configuration
+
+Database connections are managed through SQLAlchemy's connection pooling from `app/db/session.py`:
+
+```python app/db/session.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from app.models.base import Base
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,  # Ensures the connection is alive before using it
+    pool_recycle=3600,  # Recycle connections every hour
+    pool_size=10,
+    max_overflow=5,
+    echo=False,
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
+    db: Session = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+### Connection pool settings
+
+- **pool_pre_ping**: Tests connections before use to handle stale connections
+- **pool_recycle**: Recycles connections every hour to prevent timeout issues
+- **pool_size**: Maintains 10 active connections
+- **max_overflow**: Allows up to 5 additional connections during peak load
+
+<Info>
+The `get_db()` function is a FastAPI dependency that provides database sessions to endpoint handlers and automatically closes them after the request completes.
+</Info>
+
+## Database schema
+
+The database consists of six main tables with relationships between them:
+
+```
+users ─────────┐
+               ├─── userProducts ───── products ───── nutritions
+               │
+               └─── notifications
+               │
+               └─── scanlogs ───── products
+```
+
+## Model definitions
+
+All models inherit from a shared declarative base from `app/models/base.py`:
+
+```python app/models/base.py
+from sqlalchemy.orm import declarative_base
+
+Base = declarative_base()
+```
+
+### User model
+
+The User model stores authentication and profile information from `app/models/user_model.py`:
+
+```python app/models/user_model.py
+import uuid
+from sqlalchemy import Column, Integer, String
+from app.models.base import Base
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    password = Column(String(255), nullable=False)
+    dob = Column(String(255), nullable=True)
+    created_at = Column(String(255), nullable=False)
+    updated_at = Column(String(255), nullable=True)
+```
+
+**Fields:**
+- `id` - UUID primary key
+- `email` - Unique identifier for login (indexed)
+- `password` - Bcrypt hashed password
+- `name` - User's display name
+- `dob` - Date of birth (optional)
+- `created_at` - Registration timestamp
+- `updated_at` - Last profile update timestamp
+
+<Note>
+Dates and timestamps are stored as ISO 8601 formatted strings rather than native datetime types. This simplifies JSON serialization but requires manual parsing for date operations.
+</Note>
+
+### Product model
+
+The Product model represents items in the global product catalog from `app/models/product_model.py`:
+
+```python app/models/product_model.py
+from sqlalchemy import Column, Integer, String, ForeignKey
+from app.models.base import Base
+import uuid
+
+class Product(Base):
+    __tablename__ = "products"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    category = Column(String(255), nullable=False)
+    barcode = Column(String(255), nullable=False, unique=True)
+    nutritionId = Column(String(36), ForeignKey("nutritions.id"), nullable=True)
+    addedAt = Column(String(255), nullable=False)
+    updatedAt = Column(String(255), nullable=True)
+```
+
+**Fields:**
+- `id` - UUID primary key
+- `name` - Product name
+- `category` - Product category (e.g., "Dairy", "Vegetables")
+- `barcode` - Unique barcode identifier
+- `nutritionId` - Foreign key to nutrition information
+- `addedAt` - Creation timestamp
+- `updatedAt` - Last modification timestamp
+
+**Relationships:**
+- One-to-one with Nutrition (optional)
+- One-to-many with UserProduct
+- One-to-many with ScanLog
+
+### UserProduct model
+
+The UserProduct model links users to products in their inventory with expiration tracking from `app/models/user_product.py`:
+
+```python app/models/user_product.py
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum
+from app.models.base import Base
+import uuid
+import enum
+
+class UserProductStatus(enum.Enum):
+    active = "active"
+    expired = "expired"
+
+class UserProduct(Base):
+    __tablename__ = "userProducts"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    userId = Column(String(36), ForeignKey("users.id"), nullable=False)
+    productId = Column(String(36), ForeignKey("products.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    expiryDate = Column(String(255), nullable=False)
+    status = Column(String(20), nullable=False, default=UserProductStatus.active)
+    notes = Column(String(255), nullable=True)
+    addedAt = Column(String(255), nullable=False)
+    updatedAt = Column(String(255), nullable=False)
+```
+
+**Fields:**
+- `id` - UUID primary key
+- `userId` - Foreign key to User
+- `productId` - Foreign key to Product
+- `quantity` - Number of items
+- `expiryDate` - ISO 8601 formatted expiration date
+- `status` - Enum: "active" or "expired"
+- `notes` - Optional user notes
+- `addedAt` - When added to inventory
+- `updatedAt` - Last modification timestamp
+
+**Relationships:**
+- Many-to-one with User
+- Many-to-one with Product
+
+<Warning>
+The background scheduler queries this table every 10 seconds to check for expired products. Ensure the `expiryDate` and `status` columns are indexed for optimal performance.
+</Warning>
+
+### Nutrition model
+
+The Nutrition model stores detailed nutritional information from `app/models/nutrition_model.py`:
+
+```python app/models/nutrition_model.py
+from sqlalchemy import Column, Integer, String, ForeignKey
+from app.models.base import Base
+import uuid
+
+class Nutrition(Base):
+    __tablename__ = "nutritions"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    energy_kcal = Column(String(255), nullable=False)
+    carbohydrate = Column(String(255), nullable=False)
+    total_sugars = Column(String(255), nullable=False)
+    fiber = Column(String(255), nullable=False)
+    protein = Column(String(255), nullable=False)
+    saturated_fat = Column(String(255), nullable=False)
+    vitamin_a = Column(String(255), nullable=False)
+    vitamin_c = Column(String(255), nullable=False)
+    potassium = Column(String(255), nullable=False)
+    iron = Column(String(255), nullable=False)
+    calcium = Column(String(255), nullable=False)
+    sodium = Column(String(255), nullable=False)
+    cholesterol = Column(String(255), nullable=False)
+    addedAt = Column(String(255), nullable=False)
+```
+
+**Fields:**
+All nutritional values are stored as strings to accommodate various formats:
+- `energy_kcal` - Calories
+- `carbohydrate` - Carbohydrates in grams
+- `total_sugars` - Sugar content in grams
+- `fiber` - Dietary fiber in grams
+- `protein` - Protein content in grams
+- `saturated_fat` - Saturated fat in grams
+- `vitamin_a` - Vitamin A in IU
+- `vitamin_c` - Vitamin C in milligrams
+- `potassium` - Potassium in milligrams
+- `iron` - Iron in milligrams
+- `calcium` - Calcium in milligrams
+- `sodium` - Sodium in milligrams
+- `cholesterol` - Cholesterol in milligrams
+
+Nutrition data is fetched from an external API when products are added to inventory from `app/services/product_service.py:107-135`.
+
+### Notification model
+
+The Notification model tracks user notifications from `app/models/notification_model.py`:
+
+```python app/models/notification_model.py
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, Boolean
+from app.models.base import Base
+import enum
+import uuid
+
+class NotificationType(enum.Enum):
+    info = "info"
+    warning = "warning"
+    error = "error"
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    userId = Column(String(36), ForeignKey("users.id"), nullable=False)
+    productName = Column(String(255), nullable=False)
+    message = Column(String(255), nullable=False)
+    type = Column(Enum(NotificationType), nullable=False)
+    read = Column(Boolean, default=False, nullable=True)
+    created_at = Column(String(255), nullable=False)
+```
+
+**Fields:**
+- `id` - UUID primary key
+- `userId` - Foreign key to User
+- `productName` - Associated product name (denormalized)
+- `message` - Notification text
+- `type` - Enum: "info", "warning", or "error"
+- `read` - Boolean tracking read status
+- `created_at` - Notification creation timestamp
+
+**Relationships:**
+- Many-to-one with User
+
+<Info>
+The `productName` is denormalized to avoid joins when retrieving notifications. This is a performance optimization for the notification feed.
+</Info>
+
+### ScanLog model
+
+The ScanLog model records product scan history from `app/models/scanlog_model.py`:
+
+```python app/models/scanlog_model.py
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum
+from app.models.base import Base
+import enum
+import uuid
+
+class ScanStatus(enum.Enum):
+    scanned = "scanned"
+    expired = "expired"
+    not_found = "not_found"
+
+class ScanLog(Base):
+    __tablename__ = "scanlogs"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    userId = Column(String(36), ForeignKey("users.id"), nullable=False)
+    barcode = Column(String(255), nullable=False)
+    productId = Column(String(36), ForeignKey("products.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    status = Column(Enum(ScanStatus), nullable=False)
+    scanned_at = Column(String(255), nullable=False)
+```
+
+**Fields:**
+- `id` - UUID primary key
+- `userId` - Foreign key to User
+- `barcode` - Scanned barcode value
+- `productId` - Foreign key to Product
+- `quantity` - Number of items scanned
+- `status` - Enum: "scanned", "expired", or "not_found"
+- `scanned_at` - Scan timestamp
+
+**Relationships:**
+- Many-to-one with User
+- Many-to-one with Product
+
+## Query patterns
+
+### Finding users by email
+
+Used during login from `app/routers/auth.py:26`:
+
+```python
+user = db.query(User).filter(User.email == email).first()
+```
+
+The unique constraint on email ensures efficient lookups.
+
+### Getting user inventory
+
+Query products for a specific user:
+
+```python
+user_products = (
+    db.query(UserProduct)
+    .filter(UserProduct.userId == user_id)
+    .filter(UserProduct.status == "active")
+    .all()
+)
+```
+
+Join with Product and Nutrition for full details:
+
+```python
+results = (
+    db.query(UserProduct, Product, Nutrition)
+    .join(Product, UserProduct.productId == Product.id)
+    .outerjoin(Nutrition, Product.nutritionId == Nutrition.id)
+    .filter(UserProduct.userId == user_id)
+    .all()
+)
+```
+
+### Finding expired products
+
+The background scheduler queries expired products from `app/services/product_service.py:26-32`:
+
+```python
+current_time = datetime.utcnow().isoformat()
+
+expired_products = (
+    db.query(UserProduct)
+    .filter(
+        (UserProduct.expiryDate < current_time) & 
+        (UserProduct.status == "active")
+    )
+    .all()
+)
+```
+
+### Searching products by name
+
+Case-insensitive product search from `app/services/product_service.py:161`:
+
+```python
+products = db.query(Product).filter(Product.name.ilike(f"%{name}%")).all()
+```
+
+The `ilike` operator performs case-insensitive matching.
+
+## Database migrations
+
+The project uses Alembic for schema migrations. Configuration is in `alembic/env.py`:
+
+```python alembic/env.py
+from app.models.base import Base
+from app.models.user_model import User
+from app.models.product_model import Product
+from app.models.scanlog_model import ScanLog
+from app.models.nutrition_model import Nutrition
+from app.models.notification_model import Notification
+from app.models.user_product import UserProduct
+
+config = context.config
+target_metadata = Base.metadata
+
+load_dotenv()
+
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+
+config.set_main_option(
+    "sqlalchemy.url",
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+)
+```
+
+### Creating migrations
+
+Generate a new migration after model changes:
+
+```bash
+alembic revision --autogenerate -m "Add new field to user table"
+```
+
+### Applying migrations
+
+Apply pending migrations to the database:
+
+```bash
+alembic upgrade head
+```
+
+### Rolling back migrations
+
+Downgrade to a specific version:
+
+```bash
+alembic downgrade -1  # Go back one version
+alembic downgrade <revision_id>  # Go to specific version
+```
+
+<Warning>
+Always review auto-generated migrations before applying them. Alembic may not detect all schema changes correctly, especially for renames or complex alterations.
+</Warning>
+
+## Session management
+
+Database sessions are managed through FastAPI's dependency injection:
+
+```python
+from app.db.session import get_db
+from sqlalchemy.orm import Session
+
+@router.post("/endpoint")
+async def endpoint(db: Session = Depends(get_db)):
+    # Use db for queries
+    user = db.query(User).first()
+    
+    # Changes are not committed automatically
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return new_user
+```
+
+### Transaction handling
+
+Sessions use manual commit mode (`autocommit=False`):
+
+```python
+try:
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+except Exception as e:
+    db.rollback()
+    raise
+```
+
+Always wrap database operations in try-except blocks and rollback on errors.
+
+<Info>
+The `db.refresh(obj)` method reloads the object from the database after commit, ensuring you have the latest state including auto-generated fields.
+</Info>
+
+## Performance considerations
+
+### Indexing strategy
+
+Recommended indexes for optimal query performance:
+
+```sql
+-- User lookups
+CREATE INDEX idx_users_email ON users(email);
+
+-- Inventory queries
+CREATE INDEX idx_user_products_user_status ON userProducts(userId, status);
+CREATE INDEX idx_user_products_expiry ON userProducts(expiryDate, status);
+
+-- Product searches
+CREATE INDEX idx_products_barcode ON products(barcode);
+CREATE INDEX idx_products_name ON products(name);
+
+-- Notification queries
+CREATE INDEX idx_notifications_user_read ON notifications(userId, read);
+
+-- Scan history
+CREATE INDEX idx_scanlogs_user ON scanlogs(userId);
+```
+
+### Query optimization
+
+For large result sets, use pagination:
+
+```python
+page = 1
+page_size = 50
+offset = (page - 1) * page_size
+
+results = (
+    db.query(UserProduct)
+    .filter(UserProduct.userId == user_id)
+    .offset(offset)
+    .limit(page_size)
+    .all()
+)
+```
+
+Use selective loading for related data:
+
+```python
+from sqlalchemy.orm import joinedload
+
+# Eager load related data in a single query
+products = (
+    db.query(UserProduct)
+    .options(joinedload(UserProduct.product))
+    .filter(UserProduct.userId == user_id)
+    .all()
+)
+```
+
+### Connection pooling
+
+The connection pool is configured for moderate load. Adjust settings based on your deployment:
+
+```python
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=20,        # Increase for high concurrency
+    max_overflow=10,     # Allow more burst connections
+    pool_recycle=3600,   # Keep at 1 hour for MySQL
+    pool_pre_ping=True,  # Always keep this enabled
+)
+```
+
+<Note>
+MySQL's default `wait_timeout` is 28800 seconds (8 hours). Setting `pool_recycle` to 3600 (1 hour) prevents connections from being closed by the server.
+</Note>
+
+## Data integrity
+
+### Foreign key constraints
+
+All relationships use foreign keys to maintain referential integrity:
+
+- UserProduct.userId → User.id
+- UserProduct.productId → Product.id
+- Product.nutritionId → Nutrition.id
+- Notification.userId → User.id
+- ScanLog.userId → User.id
+- ScanLog.productId → Product.id
+
+### Cascading deletes
+
+When deleting products from inventory, related UserProduct records are removed from `app/services/product_service.py:262`:
+
+```python
+# Delete user products to avoid foreign key constraint issues
+db.query(UserProduct).filter(UserProduct.productId == product_id).delete()
+db.commit()
+
+db.delete(existing_product)
+db.commit()
+```
+
+<Warning>
+This is a manual cascade. Consider using SQLAlchemy's `cascade` option on relationships for automatic handling:
+
+```python
+products = relationship("Product", cascade="all, delete-orphan")
+```
+</Warning>
+
+## Schema evolution
+
+As your application grows, follow these best practices:
+
+1. **Add columns carefully**: New columns should be nullable or have defaults to avoid breaking existing data
+2. **Use migrations**: Never modify the database schema manually in production
+3. **Test migrations**: Always test migrations on a copy of production data
+4. **Version control**: Keep all migration files in version control
+5. **Document changes**: Add clear migration messages describing the purpose
+
+### Example migration workflow
+
+```bash
+# 1. Modify the model
+# Edit app/models/user_model.py
+
+# 2. Generate migration
+alembic revision --autogenerate -m "Add phone number to users"
+
+# 3. Review the generated migration
+# Edit alembic/versions/xxxx_add_phone_number_to_users.py
+
+# 4. Test on development database
+alembic upgrade head
+
+# 5. Verify the schema
+# Check that the column exists and queries work
+
+# 6. Deploy to production
+# Apply the same migration on production database
+```

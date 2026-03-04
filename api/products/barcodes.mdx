@@ -1,0 +1,66 @@
+---
+title: "Get Product Barcodes"
+api: "GET /api/product/barcodes"
+description: "Retrieve a list of all products with their barcodes"
+---
+
+## Endpoint
+
+```
+GET /api/product/barcodes
+```
+
+This endpoint retrieves a simplified list of all products in the database, returning only their names and barcode identifiers. This is useful for barcode lookup operations.
+
+## Response
+
+<ResponseField name="products" type="array">
+  Array of product objects containing name and barcode information
+  
+  <ResponseField name="productName" type="string">
+    The name of the product
+  </ResponseField>
+  
+  <ResponseField name="barcode" type="string">
+    The barcode identifier for the product
+  </ResponseField>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET https://api.expireeye.com/api/product/barcodes
+```
+
+## Example Response
+
+```json
+{
+  "products": [
+    {
+      "productName": "Organic Milk",
+      "barcode": "123456789012"
+    },
+    {
+      "productName": "Whole Wheat Bread",
+      "barcode": "987654321098"
+    },
+    {
+      "productName": "Greek Yogurt",
+      "barcode": "456789012345"
+    },
+    {
+      "productName": "Apple Juice",
+      "barcode": "789012345678"
+    }
+  ]
+}
+```
+
+## Use Cases
+
+This endpoint is particularly useful for:
+- Barcode scanning applications that need to validate if a barcode exists in the database
+- Autocomplete features that suggest products based on barcode input
+- Bulk barcode verification operations
+- Creating a local cache of product barcodes for offline functionality

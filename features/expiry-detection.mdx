@@ -1,0 +1,209 @@
+---
+title: Expiry detection
+description: Automated background monitoring system for product expiration using APScheduler
+---
+
+ExpireEye uses APScheduler to automatically monitor product expiration dates and send real-time notifications to users when their products expire.
+
+## How it works
+
+The expiry detection system runs as a background task that periodically checks all user products for expired items.
+
+<Steps>
+  <Step title="Scheduler initialization">
+    The APScheduler is configured and started when the FastAPI application launches:
+    
+    ```python
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    
+    scheduler = AsyncIOScheduler()
+    
+    @app.on_event("startup")
+    async def startup_event():
+        scheduler.add_job(check_product_expiry, CronTrigger(second="*/10"))
+        scheduler.start()
+        print("Scheduler started")
+    ```
+    
+    <Note>
+      The scheduler runs every 10 seconds to check for expired products. You can adjust this frequency by modifying the CronTrigger configuration.
+    </Note>
+  </Step>
+  
+  <Step title="Query expired products">
+    The system queries the database for products that have passed their expiry date:
+    
+    ```python
+    async def check_product_expiry():
+        db = next(get_db())
+        current_time = datetime.utcnow().isoformat()
+        
+        expired_products = (
+            db.query(UserProduct)
+            .filter(
+                (UserProduct.expiryDate < current_time) & 
+                (UserProduct.status == "active")
+            )
+            .all()
+        )
+    ```
+  </Step>
+  
+  <Step title="Update product status">
+    When an expired product is found, its status is updated from "active" to "expired":
+    
+    ```python
+    for product in expired_products:
+        product_details = (
+            db.query(Product)
+            .filter(Product.id == product.productId)
+            .first()
+        )
+        
+        product.status = "expired"
+        product.updatedAt = current_time
+        db.add(product)
+    ```
+  </Step>
+  
+  <Step title="Create notification">
+    A notification is created in the database and sent to the user via WebSocket:
+    
+    ```python
+    notification = await add_notification_to_db(
+        user_id=str(product.userId),
+        productName=product_details.name,
+        message=f"Product {product_details.name} has expired",
+        type="warning",
+        db=db,
+    )
+    
+    notification_message = {
+        "id": notification.id,
+        "type": "product_expiration",
+        "message": f"Product {product_details.name} has expired",
+        "productName": product_details.name,
+        "expiryDate": product.expiryDate,
+        "timestamp": current_time,
+    }
+    
+    await send_notification_to_user(str(product.userId), notification_message)
+    db.commit()
+    ```
+  </Step>
+</Steps>
+
+## Scheduler configuration
+
+The scheduler is configured using APScheduler's AsyncIOScheduler, which is designed for asynchronous applications:
+
+```python
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
+scheduler = AsyncIOScheduler()
+```
+
+### Cron trigger options
+
+You can configure the scheduler to run at different intervals:
+
+<CodeGroup>
+```python Every 10 seconds
+scheduler.add_job(check_product_expiry, CronTrigger(second="*/10"))
+```
+
+```python Every minute
+scheduler.add_job(check_product_expiry, CronTrigger(minute="*"))
+```
+
+```python Every hour
+scheduler.add_job(check_product_expiry, CronTrigger(hour="*"))
+```
+
+```python Daily at midnight
+scheduler.add_job(check_product_expiry, CronTrigger(hour=0, minute=0))
+```
+</CodeGroup>
+
+## Lifecycle management
+
+The scheduler is properly initialized on application startup and shut down gracefully:
+
+```python
+@app.on_event("startup")
+async def startup_event():
+    scheduler.add_job(check_product_expiry, CronTrigger(second="*/10"))
+    scheduler.start()
+    print("Scheduler started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    scheduler.shutdown()
+```
+
+<Warning>
+  Always ensure the scheduler is properly shut down when the application stops to prevent memory leaks and orphaned processes.
+</Warning>
+
+## Product status lifecycle
+
+Products go through different status states:
+
+1. **active** - Product is within its expiry date
+2. **expired** - Product has passed its expiry date (automatically set by the scheduler)
+
+```python
+if (UserProduct.expiryDate < current_time) & (UserProduct.status == "active"):
+    product.status = "expired"
+    product.updatedAt = current_time
+```
+
+## Database efficiency
+
+The expiry check system is designed to be efficient:
+
+- Only queries products with **active** status
+- Uses database-level filtering with SQLAlchemy
+- Batch commits all changes at once
+- Properly closes database connections after each check
+
+```python
+for product in expired_products:
+    # Process each expired product
+    product.status = "expired"
+    db.add(product)
+    # Create notification
+    await send_notification_to_user(str(product.userId), notification_message)
+
+db.commit()  # Single commit for all changes
+db.close()   # Properly close the connection
+```
+
+## Notification integration
+
+When a product expires, the system:
+
+1. Creates a notification record in the database
+2. Sends a real-time WebSocket notification to the user
+3. Updates the product status to "expired"
+
+<Info>
+  See the [Notifications](/features/notifications) page for more details on how real-time notifications work.
+</Info>
+
+## Testing the scheduler
+
+You can monitor the scheduler's activity by checking the console logs:
+
+```bash
+Scheduler started
+Attempting to send notification to user 12345
+Found expired product: abc-123
+Notification added to DB: <Notification object>
+```
+
+<Note>
+  The scheduler runs continuously in the background and doesn't require manual intervention once configured.
+</Note>

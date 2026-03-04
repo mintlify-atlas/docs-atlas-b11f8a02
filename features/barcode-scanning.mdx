@@ -1,0 +1,248 @@
+---
+title: Barcode scanning
+description: Scan and decode barcodes and QR codes using OpenCV image processing
+---
+
+ExpireEye provides barcode and QR code scanning functionality using OpenCV's computer vision library to quickly identify and add products to your inventory.
+
+## QR code scanning
+
+The API includes a dedicated endpoint for scanning QR codes from uploaded images:
+
+```bash
+POST /api/qr
+```
+
+### How it works
+
+<Steps>
+  <Step title="Upload image">
+    You send an image file containing a QR code to the endpoint:
+    
+    ```python
+    @app.post("/qr", tags=["QR Code"])
+    async def decode_qr_code(request: Request, file: UploadFile = File(...)):
+        access_token = request.state.user
+        user_id = access_token.get("userId")
+    ```
+  </Step>
+  
+  <Step title="Decode image with OpenCV">
+    The image is converted from bytes to a numpy array and decoded:
+    
+    ```python
+    image_bytes = await file.read()
+    np_arr = np.frombuffer(image_bytes, np.uint8)
+    
+    # Decode image using OpenCV
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    ```
+  </Step>
+  
+  <Step title="Save uploaded image">
+    The uploaded file is saved to the uploads directory:
+    
+    ```python
+    filename = (
+        str(file.filename)
+        if file.filename
+        else f"qr_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+    )
+    file_path = os.path.join("uploads", filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    ```
+  </Step>
+  
+  <Step title="Detect and decode QR code">
+    OpenCV's QRCodeDetector is used to detect and decode the QR code:
+    
+    ```python
+    # Initialize QRCode detector
+    detector = cv2.QRCodeDetector()
+    
+    # Detect and decode
+    data, bbox, _ = detector.detectAndDecode(img)
+    
+    if bbox is not None and data:
+        return {"message": "QR Scanned successfully", "data": data}
+    else:
+        return {"error": "No QR code found in the image"}
+    ```
+  </Step>
+</Steps>
+
+## Request format
+
+Send a multipart/form-data request with the image file:
+
+```bash
+curl -X POST "http://localhost:8000/api/qr" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@/path/to/qr-code.jpg"
+```
+
+## Response format
+
+<CodeGroup>
+```json Success
+{
+  "message": "QR Scanned successfully",
+  "data": "Product information from QR code"
+}
+```
+
+```json No QR code found
+{
+  "error": "No QR code found in the image"
+}
+```
+</CodeGroup>
+
+## Barcode lookup system
+
+ExpireEye includes a barcode-to-product mapping system for quick product identification:
+
+### Get all barcodes
+
+```bash
+GET /api/product/barcodes
+```
+
+Retrieve all products with their associated barcodes:
+
+```python
+@router.get("/barcodes")
+def get_products_barcode(db: Session = Depends(get_db)):
+    products = db.query(Product).all()
+    result = [
+        {
+            "productName": product.name,
+            "barcode": product.barcode,
+        }
+        for product in products
+    ]
+    return {"products": result}
+```
+
+### Barcode generation
+
+When you add a product to the inventory, a barcode is automatically generated:
+
+```python
+def generate_product_barcode(product_name: str) -> str:
+    """
+    Generates a simple barcode for a product based on its name.
+    Uses a predefined mapping for known products. For test purposes.
+    """
+    product_name = product_name.title()
+    return product_barcode_map.get(product_name, "UNKNOWN-20")
+```
+
+### Predefined barcode mapping
+
+The system includes barcodes for common products:
+
+```python
+product_barcode_map = {
+    "Apple": "AP29483",
+    "Banana": "BN10375",
+    "Lays": "8901491101813",
+    "Kurkure": "KK42196",
+    "Tomato": "TM77238",
+    "Potato": "PT66120",
+    "Onion": "ON95742",
+    "Mango": "MG33421",
+    "Carrot": "CR16027",
+    "Cucumber": "CU48290",
+    "Milk": "ML12345",
+    "Bread": "BR67890",
+    "Eggs": "EG54321",
+    "Rice": "RC98765",
+    # ... additional mappings
+}
+```
+
+## Reverse barcode lookup
+
+You can look up a product by its barcode:
+
+```python
+def get_product_name_from_barcode(barcode: str, db: Session = None) -> str:
+    """
+    Retrieves the product name from a given barcode.
+    """
+    product = db.query(Product).filter(Product.barcode == barcode).first()
+    
+    if product:
+        return product.name
+    else:
+        return None
+```
+
+## Image processing with OpenCV
+
+The system uses OpenCV for robust image processing:
+
+```python
+import cv2
+import numpy as np
+
+# Convert image bytes to numpy array
+np_arr = np.frombuffer(image_bytes, np.uint8)
+
+# Decode image
+img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+# Initialize QR detector
+detector = cv2.QRCodeDetector()
+
+# Detect and decode
+data, bbox, _ = detector.detectAndDecode(img)
+```
+
+<Info>
+  OpenCV's QRCodeDetector can handle various QR code formats and orientations automatically.
+</Info>
+
+## Supported image formats
+
+The API accepts the following image formats:
+
+- JPEG (.jpg, .jpeg)
+- PNG (.png)
+- BMP (.bmp)
+- TIFF (.tiff)
+
+<Note>
+  All uploaded images are temporarily stored in the `uploads/` directory for processing.
+</Note>
+
+## Integration with product detection
+
+QR code scanning can be combined with AI-based product detection for a complete inventory management workflow:
+
+1. Scan QR code to identify product
+2. Use YOLO detection to verify product visually
+3. Automatically add to user inventory
+4. Track expiry dates and receive notifications
+
+<Warning>
+  Make sure the `uploads/` directory exists and has proper write permissions before using the QR scanning feature.
+</Warning>
+
+## Error handling
+
+The system handles common scanning errors:
+
+- **No QR code detected**: Returns error message with guidance
+- **Invalid image format**: OpenCV will fail to decode the image
+- **Corrupted file**: Returns appropriate error response
+
+```python
+if bbox is not None and data:
+    return {"message": "QR Scanned successfully", "data": data}
+else:
+    return {"error": "No QR code found in the image"}
+```

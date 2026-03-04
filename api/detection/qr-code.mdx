@@ -1,0 +1,212 @@
+---
+title: "QR Code Scanning"
+api: "POST /api/qr"
+description: "Scan and decode QR codes from uploaded images"
+---
+
+## Endpoint
+
+```
+POST /api/qr
+```
+
+Scans an uploaded image for QR codes and decodes the contained data using OpenCV's QRCodeDetector.
+
+## Authentication
+
+This endpoint requires authentication via Bearer token in the Authorization header.
+
+```bash
+Authorization: Bearer <your_access_token>
+```
+
+## Request
+
+<ParamField body="file" type="file" required>
+  The image file containing a QR code. Supports common image formats (JPG, PNG, etc.)
+  
+  Must be sent as multipart/form-data.
+</ParamField>
+
+<Note>
+  **File Format Requirements:**
+  - Supported formats: JPG, JPEG, PNG, BMP, and other OpenCV-compatible formats
+  - QR code should be clearly visible and not distorted
+  - Good lighting and contrast improve detection accuracy
+  - Image is automatically saved to `uploads/` folder with timestamp if filename not provided
+</Note>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message when QR code is detected and decoded
+</ResponseField>
+
+<ResponseField name="data" type="string">
+  The decoded data from the QR code (URL, text, or any encoded information)
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if no QR code is found in the image
+</ResponseField>
+
+### Success Response (200)
+
+```json
+{
+  "message": "QR Scanned successfully",
+  "data": "https://example.com/product/12345"
+}
+```
+
+### No QR Code Found (200)
+
+```json
+{
+  "error": "No QR code found in the image"
+}
+```
+
+### Error Response (401)
+
+```json
+{
+  "detail": "Authorization header missing or invalid."
+}
+```
+
+## Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.expireeye.com/api/qr \
+  -H "Authorization: Bearer your_access_token" \
+  -F "file=@/path/to/qr-code.jpg"
+```
+
+```python Python
+import requests
+
+url = "https://api.expireeye.com/api/qr"
+headers = {
+    "Authorization": "Bearer your_access_token"
+}
+
+with open("qr-code.jpg", "rb") as f:
+    files = {"file": f}
+    response = requests.post(url, headers=headers, files=files)
+    
+result = response.json()
+if "data" in result:
+    print(f"QR Code Data: {result['data']}")
+else:
+    print(f"Error: {result.get('error')}")
+```
+
+```javascript JavaScript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('https://api.expireeye.com/api/qr', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer your_access_token'
+  },
+  body: formData
+});
+
+const result = await response.json();
+if (result.data) {
+  console.log('QR Code Data:', result.data);
+} else {
+  console.log('Error:', result.error);
+}
+```
+
+```java Java
+import okhttp3.*;
+import java.io.File;
+
+OkHttpClient client = new OkHttpClient();
+
+RequestBody requestBody = new MultipartBody.Builder()
+    .setType(MultipartBody.FORM)
+    .addFormDataPart("file", "qr-code.jpg",
+        RequestBody.create(
+            new File("/path/to/qr-code.jpg"),
+            MediaType.parse("image/jpeg")
+        ))
+    .build();
+
+Request request = new Request.Builder()
+    .url("https://api.expireeye.com/api/qr")
+    .addHeader("Authorization", "Bearer your_access_token")
+    .post(requestBody)
+    .build();
+
+Response response = client.newCall(request).execute();
+System.out.println(response.body().string());
+```
+
+</CodeGroup>
+
+## Implementation Details
+
+### QR Code Detection Process
+
+1. **Image Upload**: The image file is received as multipart/form-data
+2. **Image Processing**:
+   - Image bytes are read into a NumPy array
+   - OpenCV decodes the image from the byte array
+   - Image is saved to the `uploads/` folder for processing
+3. **QR Detection**:
+   - OpenCV's `QRCodeDetector()` is initialized
+   - The detector scans the image using `detectAndDecode()`
+   - Returns decoded data and bounding box coordinates
+4. **Response**:
+   - If QR code found: Returns success message with decoded data
+   - If no QR code: Returns error message
+
+### Technology Stack
+
+- **OpenCV**: Used for image processing and QR code detection
+- **NumPy**: Array manipulation for image data
+- **FastAPI**: Request handling and file uploads
+
+### File Handling
+
+Images are saved with the following naming convention:
+- If filename provided: Uses original filename
+- If no filename: Generates timestamp-based name (format: `qr_YYYYMMDD_HHMMSS.jpg`)
+
+Upload directory: `uploads/`
+
+### Detection Capabilities
+
+The OpenCV QRCodeDetector can decode:
+- URLs
+- Plain text
+- Contact information (vCard)
+- WiFi credentials
+- Any UTF-8 encoded data in QR codes
+
+### User Context
+
+The endpoint extracts the user ID from the JWT token for potential future features like:
+- Adding scanned products to user inventory (currently commented out)
+- Tracking scan history
+- User-specific analytics
+
+<Note>
+  **Future Enhancement**: The endpoint includes commented code for automatically adding scanned products to the user's inventory. This feature can be enabled to streamline the product addition workflow.
+</Note>
+
+## Error Handling
+
+| Status Code | Description |
+|-------------|-------------|
+| 200 | Success - QR code decoded or no QR code found |
+| 401 | Unauthorized - Missing or invalid access token |
+| 422 | Validation Error - Invalid file format or missing file |
+| 500 | Internal Server Error - Image processing failure |

@@ -1,0 +1,426 @@
+---
+title: Database Migrations
+description: Complete guide to managing database schema changes with Alembic
+icon: database
+---
+
+ExpireEye Backend uses Alembic for database migrations, allowing you to version control your database schema and apply changes systematically.
+
+## Overview
+
+Alembic is a database migration tool for SQLAlchemy. It tracks schema changes and allows you to:
+
+- Version control your database schema
+- Generate migrations automatically from model changes
+- Apply or rollback migrations safely
+- Collaborate with team members on schema changes
+
+## Prerequisites
+
+Before working with migrations, ensure:
+
+- Your [environment is configured](/guides/environment-setup) with valid database credentials
+- The target database exists and is accessible
+- You have the project dependencies installed
+
+## Migration Workflow
+
+### Initial Setup
+
+The project comes pre-configured with Alembic. The configuration is located in:
+
+- `alembic.ini` - Main configuration file
+- `alembic/env.py` - Migration environment setup
+- `alembic/versions/` - Generated migration scripts
+
+<Note>
+The Alembic configuration in `alembic/env.py` automatically imports all models and constructs the database URL from environment variables.
+</Note>
+
+### Understanding the Configuration
+
+The `alembic/env.py` file is configured to:
+
+```python alembic/env.py
+from app.models.base import Base
+from app.models.user_model import User
+from app.models.product_model import Product
+from app.models.scanlog_model import ScanLog
+from app.models.nutrition_model import Nutrition
+from app.models.notification_model import Notification
+from app.models.user_product import UserProduct
+
+# Load environment variables
+load_dotenv()
+
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
+
+# Configure database URL
+config.set_main_option(
+    "sqlalchemy.url",
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+)
+```
+
+<Warning>
+All model imports must be present in `alembic/env.py` for autogenerate to detect schema changes. If you create new models, add their imports here.
+</Warning>
+
+## Common Migration Tasks
+
+### Creating a New Migration
+
+When you modify your SQLAlchemy models, generate a migration to apply those changes:
+
+<Steps>
+  <Step title="Modify your models">
+    Make changes to your model files in `app/models/`.
+  </Step>
+  
+  <Step title="Generate the migration">
+    Use Alembic's autogenerate feature to create a migration script:
+    
+    ```bash
+    alembic revision --autogenerate -m "Add user email verification"
+    ```
+    
+    This creates a new file in `alembic/versions/` with the detected changes.
+  </Step>
+  
+  <Step title="Review the migration">
+    Always review the generated migration script before applying it:
+    
+    ```bash
+    # Check the latest migration file
+    ls -lt alembic/versions/ | head -n 2
+    ```
+    
+    Open the file and verify the `upgrade()` and `downgrade()` functions.
+  </Step>
+  
+  <Step title="Apply the migration">
+    Apply the migration to your database:
+    
+    ```bash
+    alembic upgrade head
+    ```
+  </Step>
+</Steps>
+
+### Applying Migrations
+
+<CodeGroup>
+```bash Upgrade to Latest
+# Apply all pending migrations
+alembic upgrade head
+```
+
+```bash Upgrade Incrementally
+# Apply one migration at a time
+alembic upgrade +1
+```
+
+```bash Upgrade to Specific Revision
+# Upgrade to a specific migration
+alembic upgrade abc123def456
+```
+</CodeGroup>
+
+### Rolling Back Migrations
+
+If you need to revert changes:
+
+<CodeGroup>
+```bash Downgrade One Migration
+# Revert the most recent migration
+alembic downgrade -1
+```
+
+```bash Downgrade to Specific Revision
+# Revert to a specific migration
+alembic downgrade abc123def456
+```
+
+```bash Downgrade to Base
+# Remove all migrations (dangerous!)
+alembic downgrade base
+```
+</CodeGroup>
+
+<Warning>
+Always backup your database before downgrading, especially in production. Data loss may occur if migrations drop tables or columns.
+</Warning>
+
+### Viewing Migration History
+
+Check the current state and history of migrations:
+
+<CodeGroup>
+```bash Current Revision
+# Show the current database revision
+alembic current
+```
+
+```bash Migration History
+# List all migrations and their status
+alembic history
+```
+
+```bash Verbose History
+# Show detailed migration history
+alembic history --verbose
+```
+</CodeGroup>
+
+## Database Schema
+
+The ExpireEye Backend includes the following main models:
+
+| Model | Purpose | Key Fields |
+|-------|---------|-----------|
+| `User` | User accounts | id, email, password_hash, created_at |
+| `Product` | Product catalog | id, name, category, barcode |
+| `UserProduct` | User inventory | user_id, product_id, expiry_date, quantity |
+| `Notification` | User notifications | id, user_id, message, is_read |
+| `ScanLog` | Scan history | id, user_id, product_id, scanned_at |
+| `Nutrition` | Nutritional data | product_id, calories, protein, carbs |
+
+## Advanced Migration Scenarios
+
+### Creating Empty Migration
+
+For manual schema changes or data migrations:
+
+```bash
+alembic revision -m "Add custom indexes"
+```
+
+Edit the generated file to add your custom operations:
+
+```python
+def upgrade():
+    op.create_index('idx_user_email', 'users', ['email'])
+    op.create_index('idx_product_expiry', 'user_products', ['expiry_date'])
+
+def downgrade():
+    op.drop_index('idx_product_expiry', 'user_products')
+    op.drop_index('idx_user_email', 'users')
+```
+
+### Data Migrations
+
+For populating or transforming data:
+
+```python
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.sql import table, column
+
+def upgrade():
+    # Define minimal table representation
+    users = table('users',
+        column('id', sa.Integer),
+        column('status', sa.String)
+    )
+    
+    # Update existing data
+    op.execute(
+        users.update()
+        .where(users.c.status == None)
+        .values(status='active')
+    )
+
+def downgrade():
+    pass  # Data migrations often can't be reversed
+```
+
+### Handling Conflicts
+
+When multiple developers create migrations:
+
+<Steps>
+  <Step title="Identify the conflict">
+    ```bash
+    alembic history
+    ```
+    
+    Look for branches in the revision history.
+  </Step>
+  
+  <Step title="Merge the branches">
+    ```bash
+    alembic merge -m "Merge migration branches" head1 head2
+    ```
+  </Step>
+  
+  <Step title="Apply the merged migration">
+    ```bash
+    alembic upgrade head
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+### Development Workflow
+
+1. **Always review autogenerated migrations** - Alembic may miss certain changes or generate incorrect operations
+2. **Test migrations on a copy of production data** - Ensure migrations work with real data
+3. **Keep migrations small and focused** - One logical change per migration
+4. **Write descriptive migration messages** - Use clear, actionable descriptions
+
+<CodeGroup>
+```bash Good Migration Messages
+alembic revision --autogenerate -m "Add user email verification field"
+alembic revision --autogenerate -m "Create indexes for product search"
+alembic revision --autogenerate -m "Add cascade delete to user_products"
+```
+
+```bash Poor Migration Messages
+alembic revision --autogenerate -m "Update models"
+alembic revision --autogenerate -m "Changes"
+alembic revision --autogenerate -m "Fix"
+```
+</CodeGroup>
+
+### Testing Migrations
+
+Always test the complete migration cycle:
+
+```bash
+# Test upgrade
+alembic upgrade head
+
+# Verify the changes
+mysql -u $DB_USER -p$DB_PASSWORD -e "SHOW TABLES; DESCRIBE users;" $DB_NAME
+
+# Test downgrade
+alembic downgrade -1
+
+# Verify the rollback
+mysql -u $DB_USER -p$DB_PASSWORD -e "DESCRIBE users;" $DB_NAME
+
+# Re-apply
+alembic upgrade head
+```
+
+### Production Deployment
+
+<Warning>
+Before running migrations in production:
+1. **Backup your database** completely
+2. **Test migrations on a staging environment** with production data copy
+3. **Schedule downtime** if the migration requires it
+4. **Have a rollback plan** ready
+</Warning>
+
+Production migration workflow:
+
+<Steps>
+  <Step title="Backup the database">
+    ```bash
+    mysqldump -u $DB_USER -p$DB_PASSWORD $DB_NAME > backup_$(date +%Y%m%d_%H%M%S).sql
+    ```
+  </Step>
+  
+  <Step title="Check current revision">
+    ```bash
+    alembic current
+    ```
+  </Step>
+  
+  <Step title="Preview pending migrations">
+    ```bash
+    alembic history
+    ```
+  </Step>
+  
+  <Step title="Apply migrations">
+    ```bash
+    alembic upgrade head
+    ```
+  </Step>
+  
+  <Step title="Verify application health">
+    Test critical endpoints to ensure the application works correctly.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Common Issues
+
+**"Target database is not up to date"**
+
+This means your database is out of sync with the migrations:
+
+```bash
+# Check current state
+alembic current
+
+# Check expected state
+alembic heads
+
+# Stamp the database if needed (use cautiously)
+alembic stamp head
+```
+
+**"Can't locate revision identified by 'xyz'"**
+
+The migration file is missing or was deleted:
+
+1. Restore the migration file from version control
+2. Or stamp to the last known good revision: `alembic stamp abc123`
+
+**Autogenerate detects no changes**
+
+Ensure your models are imported in `alembic/env.py`:
+
+```python alembic/env.py
+# Add missing model imports
+from app.models.your_new_model import YourNewModel
+```
+
+**Migration fails with foreign key constraint error**
+
+Reorder operations in the migration to handle dependencies:
+
+```python
+def upgrade():
+    # Drop constraints first
+    op.drop_constraint('fk_user_product', 'user_products')
+    # Then modify tables
+    op.drop_column('user_products', 'old_column')
+    # Recreate constraints
+    op.create_foreign_key('fk_user_product', 'user_products', 'products', ['product_id'], ['id'])
+```
+
+## Integration with Application
+
+The FastAPI application automatically uses the migrated schema:
+
+```python app/db/session.py
+from sqlalchemy import create_engine
+from app.models.base import Base
+
+# The engine connects to the migrated database
+engine = create_engine(DATABASE_URL)
+```
+
+No additional configuration is needed - once migrations are applied, the application will use the updated schema.
+
+## Next Steps
+
+- [Configure environment variables](/guides/environment-setup) for database access
+- [Deploy your application](/guides/deployment) with proper migration procedures
+- Learn more about [Alembic migrations](https://alembic.sqlalchemy.org/en/latest/tutorial.html)
+
+## Additional Resources
+
+- [Alembic Documentation](https://alembic.sqlalchemy.org/)
+- [SQLAlchemy Models](https://docs.sqlalchemy.org/en/20/orm/mapping_styles.html)
+- [MySQL Best Practices](https://dev.mysql.com/doc/refman/8.0/en/optimization.html)

@@ -1,0 +1,178 @@
+---
+title: "YOLO Object Detection"
+api: "POST /api/yolo/detect"
+description: "Detect objects in images using YOLO model and get annotated results with bounding boxes"
+---
+
+## Endpoint
+
+```
+POST /api/yolo/detect
+```
+
+Detects objects in an uploaded image using a YOLO (You Only Look Once) deep learning model. Returns the highest confidence detection along with an annotated image showing all detected objects with bounding boxes.
+
+## Authentication
+
+This endpoint requires authentication via Bearer token in the Authorization header.
+
+```bash
+Authorization: Bearer <your_access_token>
+```
+
+## Request
+
+<ParamField body="file" type="file" required>
+  The image file to analyze. Supports common image formats (JPG, PNG, etc.)
+  
+  Must be sent as multipart/form-data.
+</ParamField>
+
+<Note>
+  **File Format Requirements:**
+  - Supported formats: JPG, JPEG, PNG, BMP
+  - Image must be readable by OpenCV
+  - Recommended: Clear, well-lit images for better detection accuracy
+  - Model confidence threshold: 0.25
+</Note>
+
+## Response
+
+<ResponseField name="detection" type="object">
+  The highest confidence detection from all detected objects
+  
+  <ResponseField name="name" type="string">
+    The class name of the detected object
+  </ResponseField>
+  
+  <ResponseField name="confidence" type="number">
+    Confidence score between 0 and 1
+  </ResponseField>
+  
+  <ResponseField name="bbox" type="array">
+    Bounding box coordinates as [x1, y1, x2, y2] where (x1, y1) is top-left and (x2, y2) is bottom-right
+  </ResponseField>
+  
+  <ResponseField name="avg_color_rgb" type="array">
+    Average RGB color of the detected object region as [r, g, b] values (0-255)
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="annotated_image_url" type="string">
+  Cloudinary URL of the annotated image with bounding boxes and labels drawn on it
+</ResponseField>
+
+### Success Response (200)
+
+```json
+{
+  "detection": {
+    "name": "apple",
+    "confidence": 0.92,
+    "bbox": [150, 200, 350, 450],
+    "avg_color_rgb": [195, 45, 38]
+  },
+  "annotated_image_url": "https://res.cloudinary.com/your-cloud/image/upload/v1234567890/annotated_image.jpg"
+}
+```
+
+### No Detections Response (200)
+
+```json
+{
+  "detections": [],
+  "message": "No objects detected",
+  "annotated_image_url": null
+}
+```
+
+### Error Response (500)
+
+```json
+{
+  "detail": "Could not load image at uploads/image.jpg"
+}
+```
+
+## Code Examples
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST https://api.expireeye.com/api/yolo/detect \
+  -H "Authorization: Bearer your_access_token" \
+  -F "file=@/path/to/image.jpg"
+```
+
+```python Python
+import requests
+
+url = "https://api.expireeye.com/api/yolo/detect"
+headers = {
+    "Authorization": "Bearer your_access_token"
+}
+
+with open("image.jpg", "rb") as f:
+    files = {"file": f}
+    response = requests.post(url, headers=headers, files=files)
+    
+print(response.json())
+```
+
+```javascript JavaScript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('https://api.expireeye.com/api/yolo/detect', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer your_access_token'
+  },
+  body: formData
+});
+
+const data = await response.json();
+console.log(data);
+```
+
+</CodeGroup>
+
+## Integration Details
+
+### YOLO Model
+
+The endpoint uses the YOLO (You Only Look Once) model loaded from `best.pt` with the following configuration:
+
+- **Confidence Threshold**: 0.25 (detections below this confidence are filtered out)
+- **Model**: Custom-trained YOLO model optimized for product detection
+- **Framework**: Ultralytics YOLO implementation
+
+### Cloudinary Integration
+
+Annotated images are automatically uploaded to Cloudinary with the following configuration:
+
+- **Environment Variables Required**:
+  - `CLOUDINARY_CLOUD_NAME`: Your Cloudinary cloud name
+  - `CLOUDINARY_API_KEY`: Your Cloudinary API key
+  - `CLOUDINARY_API_SECRET`: Your Cloudinary API secret
+- **Upload Settings**: Secure URLs enabled by default
+
+### Detection Process
+
+1. Image is uploaded and saved temporarily in the `uploads/` folder
+2. YOLO model processes the image and detects objects
+3. For each detection:
+   - Bounding box coordinates are extracted
+   - Confidence score is calculated
+   - Average RGB color of the detected region is computed
+   - Bounding boxes and labels are drawn on the image
+4. The detection with highest confidence is selected as the primary result
+5. Annotated image is uploaded to Cloudinary
+6. Results are returned with the Cloudinary URL
+
+### Image Annotations
+
+The annotated image includes:
+- Green bounding boxes around detected objects
+- Labels showing class name and confidence score
+- Format: `{class_name} {confidence:.2f}`

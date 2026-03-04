@@ -1,0 +1,236 @@
+---
+title: Product tracking
+description: Manage your product inventory with categories, barcodes, and nutrition data
+---
+
+The ExpireEye API provides a comprehensive product inventory management system that allows you to track food items with detailed information including categories, barcodes, and nutritional data.
+
+## Product model
+
+Products in the system are stored with the following attributes:
+
+```python
+class Product(Base):
+    __tablename__ = "products"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False)
+    category = Column(String(255), nullable=False)
+    barcode = Column(String(255), nullable=False, unique=True)
+    nutritionId = Column(String(36), ForeignKey("nutritions.id"), nullable=True)
+    addedAt = Column(String(255), nullable=False)
+    updatedAt = Column(String(255), nullable=True)
+```
+
+Each product is linked to a nutrition record that contains detailed nutritional information.
+
+## Add product to inventory
+
+You can add a new product to the inventory system using the product service:
+
+<Steps>
+  <Step title="Validate product information">
+    The system checks if the product name is at least 3 characters long and verifies the user exists:
+    
+    ```python
+    if len(product_name) < 3:
+        raise HTTPException(
+            status_code=400, 
+            detail="Product name must be at least 3 characters long."
+        )
+    
+    exists_user = db.query(User).filter_by(id=user_id).first()
+    if not exists_user:
+        raise HTTPException(
+            status_code=404, 
+            detail="User with the provided userId does not exist."
+        )
+    ```
+  </Step>
+  
+  <Step title="Generate barcode">
+    The system generates a unique barcode for the product using a predefined mapping:
+    
+    ```python
+    product_barcode = generate_product_barcode(product_name)
+    
+    # Barcode generation from app/utils/product_utils.py
+    def generate_product_barcode(product_name: str) -> str:
+        product_name = product_name.title()
+        return product_barcode_map.get(product_name, "UNKNOWN-20")
+    ```
+  </Step>
+  
+  <Step title="Fetch nutrition data">
+    The system automatically fetches nutritional information for the product:
+    
+    ```python
+    food_nutrition = fetch_nutrition(product_name)
+    
+    nutrition_data = {
+        "energy_kcal": check_nutrition_exists("Energy (KCAL)", food_nutrition),
+        "carbohydrate": check_nutrition_exists("Carbohydrate, by difference (G)", food_nutrition),
+        "protein": check_nutrition_exists("Protein (G)", food_nutrition),
+        "fiber": check_nutrition_exists("Fiber, total dietary (G)", food_nutrition),
+        # ... additional nutrition fields
+    }
+    ```
+  </Step>
+  
+  <Step title="Create product record">
+    The system creates both nutrition and product records in the database:
+    
+    ```python
+    new_nutrition = Nutrition(**nutrition_data)
+    db.add(new_nutrition)
+    db.commit()
+    db.refresh(new_nutrition)
+    
+    product_data = {
+        "name": product_name,
+        "category": category,
+        "barcode": product_barcode if product_barcode else "N/A",
+        "nutritionId": new_nutrition.id,
+        "addedAt": datetime.utcnow().isoformat(),
+    }
+    
+    new_product = Product(**product_data)
+    db.add(new_product)
+    db.commit()
+    ```
+  </Step>
+</Steps>
+
+## API endpoints
+
+### Add product
+
+```bash
+POST /api/product/inventory/add
+```
+
+Add a new product to the global inventory:
+
+```json
+{
+  "productName": "Apple",
+  "category": "Fruits"
+}
+```
+
+### List products
+
+```bash
+GET /api/product/inventory/list?name=apple
+```
+
+Retrieve all products from the inventory with optional name filtering.
+
+### Update product
+
+```bash
+PUT /api/product/inventory/update/{product_id}
+```
+
+Update product details including name, category, or barcode:
+
+```json
+{
+  "name": "Green Apple",
+  "category": "Fruits",
+  "barcode": "AP29483"
+}
+```
+
+### Delete product
+
+```bash
+DELETE /api/product/inventory/delete/{product_id}
+```
+
+<Warning>
+  Deleting a product will also remove all associated user product entries to maintain referential integrity.
+</Warning>
+
+### Get barcodes
+
+```bash
+GET /api/product/barcodes
+```
+
+Retrieve all product names with their associated barcodes.
+
+## Nutrition tracking
+
+Every product includes comprehensive nutritional information:
+
+- Energy (KCAL)
+- Carbohydrates
+- Total Sugars
+- Dietary Fiber
+- Protein
+- Saturated Fat
+- Vitamins (A, C)
+- Minerals (Potassium, Iron, Calcium, Sodium)
+- Cholesterol
+
+<Info>
+  Nutrition data is automatically fetched from an external API when a product is added to the inventory.
+</Info>
+
+## Barcode system
+
+The system includes a predefined barcode mapping for common products:
+
+```python
+product_barcode_map = {
+    "Apple": "AP29483",
+    "Banana": "BN10375",
+    "Lays": "8901491101813",
+    "Coca Cola": "CC1234567890",
+    "Milk": "ML12345",
+    "Bread": "BR67890",
+    # ... additional mappings
+}
+```
+
+You can retrieve product information using barcodes through the `get_product_name_from_barcode()` utility function.
+
+## Bulk operations
+
+The API supports adding multiple products at once:
+
+```bash
+POST /api/product/inventory/add-mass
+```
+
+```json
+{
+  "products": [
+    {"productName": "Apple", "category": "Fruits"},
+    {"productName": "Banana", "category": "Fruits"},
+    {"productName": "Milk", "category": "Dairy"}
+  ]
+}
+```
+
+The response includes detailed success and failure information for each product:
+
+```json
+{
+  "success": [
+    {"productId": "uuid-1", "name": "Apple"},
+    {"productId": "uuid-2", "name": "Banana"}
+  ],
+  "failed": [
+    {
+      "product": {"productName": "X", "category": "Y"},
+      "reason": "Product name must be at least 3 characters long"
+    }
+  ]
+}
+```
+
+<Note>
+  All product operations require authentication via JWT token in the Authorization header.
+</Note>

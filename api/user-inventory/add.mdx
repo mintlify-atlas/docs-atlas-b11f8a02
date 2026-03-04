@@ -1,0 +1,183 @@
+---
+title: "Add Product to Inventory"
+api: "POST /api/product/user/add"
+description: "Add a new product to the user's inventory with optional barcode scanning"
+---
+
+## Overview
+
+This endpoint adds a product to the authenticated user's inventory. It supports two modes:
+- **Barcode scanning**: Provide a `barcode` query parameter to automatically fetch product details
+- **Manual entry**: Provide product details in the request body
+
+## Authentication
+
+This endpoint requires authentication. The user's access token must be included in the request and contains the `userId` extracted from `request.state.user`.
+
+## Expiry Date Calculation
+
+The endpoint automatically calculates expiry dates based on the input method:
+
+- **Barcode scanning** (`barcode` parameter provided): Sets expiry to 20 seconds from current time (for testing purposes)
+- **Scanned product** (`isScannedProduct: true`): Calculates expiry based on product shelf life (fetched from product database)
+- **Manual entry**: Sets expiry to 10 seconds from current time (default behavior)
+
+## Request
+
+### Query Parameters
+
+<ParamField query="barcode" type="string" optional>
+  The barcode of the product to scan. When provided, the product name is automatically fetched from the database, and quantity is set to 1.
+</ParamField>
+
+### Body Parameters
+
+<ParamField body="name" type="string" optional>
+  Name of the product. Required when barcode is not provided.
+</ParamField>
+
+<ParamField body="quantity" type="integer" default={1}>
+  Quantity of the product to add.
+</ParamField>
+
+<ParamField body="category" type="string" default="Uncategorized">
+  Category of the product.
+</ParamField>
+
+<ParamField body="expiryDate" type="string" optional>
+  ISO 8601 formatted expiry date. If not provided, it will be calculated automatically.
+</ParamField>
+
+<ParamField body="notes" type="string" optional>
+  Additional notes about the product.
+</ParamField>
+
+<ParamField body="isScannedProduct" type="boolean" default={false}>
+  Indicates if the product was scanned (triggers shelf life calculation and notifications).
+</ParamField>
+
+## Response
+
+<ResponseField name="message" type="string">
+  Success message confirming the product was added.
+</ResponseField>
+
+<ResponseField name="productId" type="string">
+  The ID of the product in the product inventory.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Name of the product that was added.
+</ResponseField>
+
+<ResponseField name="quantity" type="integer">
+  Quantity of the product added.
+</ResponseField>
+
+<ResponseField name="expiryDate" type="string">
+  ISO 8601 formatted expiry date of the product.
+</ResponseField>
+
+## Examples
+
+### Add Product via Barcode
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.expireeye.com/api/product/user/add?barcode=1234567890" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+```json Response
+{
+  "message": "New Product added to user inventory successfully",
+  "productId": "prod_123abc",
+  "name": "Milk",
+  "quantity": 1,
+  "expiryDate": "2026-03-04T12:30:20.000Z"
+}
+```
+</CodeGroup>
+
+### Add Product Manually
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.expireeye.com/api/product/user/add" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Organic Eggs",
+    "quantity": 2,
+    "category": "Dairy",
+    "notes": "Store in refrigerator",
+    "isScannedProduct": false
+  }'
+```
+
+```json Response
+{
+  "message": "New Product added to user inventory successfully",
+  "productId": "prod_456def",
+  "name": "Organic Eggs",
+  "quantity": 2,
+  "expiryDate": "2026-03-04T12:10:10.000Z"
+}
+```
+</CodeGroup>
+
+### Add Scanned Product with Shelf Life
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.expireeye.com/api/product/user/add" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Fresh Bread",
+    "quantity": 1,
+    "category": "Bakery",
+    "isScannedProduct": true
+  }'
+```
+
+```json Response
+{
+  "message": "New Product added to user inventory successfully",
+  "productId": "prod_789ghi",
+  "name": "Fresh Bread",
+  "quantity": 1,
+  "expiryDate": "2026-03-11T12:00:00.000Z"
+}
+```
+</CodeGroup>
+
+## Error Responses
+
+### Barcode Not Found
+
+```json
+{
+  "detail": "Product not found for the provided barcode"
+}
+```
+
+**Status Code:** 404
+
+### User Not Found
+
+```json
+{
+  "detail": "User with the provided userId does not exist."
+}
+```
+
+**Status Code:** 404
+
+## Behavior Notes
+
+1. **Auto-create Products**: If the product doesn't exist in the main product inventory, it will be automatically created with category "Uncategorized"
+2. **Notifications**: When `isScannedProduct: true`, the system sends a real-time notification to the user with product details and nutrition information
+3. **Notes Auto-generation**: When using barcode scanning, notes are automatically set to "Scanned Via Barcode with Code {barcode}"

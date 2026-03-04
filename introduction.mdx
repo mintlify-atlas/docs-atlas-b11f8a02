@@ -1,0 +1,234 @@
+---
+title: ExpireEye Backend Documentation
+description: Smart food expiry tracking with AI-powered detection and barcode scanning
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#10b981] via-[#059669] to-[#047857] dark:from-[#059669] dark:via-[#047857] dark:to-[#065f46] py-20">
+  <div className="max-w-6xl mx-auto px-6">
+    <div className="grid lg:grid-cols-12 gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6">
+          ExpireEye Backend API
+        </h1>
+        <p className="text-xl text-white/90 max-w-2xl mb-8">
+          A powerful FastAPI backend service for food expiry tracking with AI-powered object detection, barcode scanning, and real-time notifications.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 bg-white text-[#10b981] font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Get Started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a 
+            href="/api/auth/login" 
+            className="inline-flex items-center px-6 py-3 bg-white/10 text-white font-semibold rounded-lg border border-white/30 hover:bg-white/20 transition-colors"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-white/5 rounded-2xl blur-3xl"></div>
+          <div className="relative bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-white font-semibold">JWT Authentication</div>
+                  <div className="text-white/70 text-sm">Secure token-based auth</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-white font-semibold">Product Tracking</div>
+                  <div className="text-white/70 text-sm">Smart expiry management</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-white font-semibold">AI Detection</div>
+                  <div className="text-white/70 text-sm">YOLO-powered recognition</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">Quick start</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Get your ExpireEye backend up and running in minutes</p>
+
+  <Steps>
+    <Step title="Clone and install dependencies">
+      Clone the repository and install the required Python packages.
+      
+      ```bash
+      git clone https://github.com/adgator101/ExpireEye-backend
+      cd ExpireEye-backend
+      python -m venv venv
+      source venv/bin/activate
+      pip install -r requirements.txt
+      ```
+    </Step>
+
+    <Step title="Configure environment variables">
+      Create a `.env` file with your database and API credentials.
+      
+      ```bash
+      cp .env.example .env
+      ```
+      
+      <Note>
+        You'll need to configure database credentials, JWT secret, Cloudinary settings for image uploads, and other API keys.
+      </Note>
+    </Step>
+
+    <Step title="Run database migrations">
+      Initialize your database schema using Alembic.
+      
+      ```bash
+      alembic upgrade head
+      ```
+    </Step>
+
+    <Step title="Start the server">
+      Launch the FastAPI development server.
+      
+      ```bash
+      uvicorn app.main:app --reload
+      ```
+      
+      Your API is now running at `http://localhost:8000/api`
+      
+      <Accordion title="View interactive documentation">
+        FastAPI provides automatic interactive API documentation:
+        - **Swagger UI**: http://localhost:8000/docs
+        - **ReDoc**: http://localhost:8000/redoc
+      </Accordion>
+    </Step>
+
+    <Step title="Make your first API request">
+      Test the API by creating a user account.
+      
+      ```bash
+      curl -X POST "http://localhost:8000/api/auth/signup" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "name": "John Doe",
+          "email": "john@example.com",
+          "password": "securepass123",
+          "dob": "1990-01-01"
+        }'
+      ```
+      
+      <Accordion title="Example response">
+        ```json
+        {
+          "message": "User created successfully",
+          "userId": "550e8400-e29b-41d4-a716-446655440000",
+          "email": "john@example.com",
+          "dob": "1990-01-01",
+          "created_at": "2024-03-04T10:30:00.000000"
+        }
+        ```
+      </Accordion>
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">Explore by feature</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Discover what you can build with ExpireEye Backend</p>
+
+  <CardGroup cols={2}>
+    <Card title="Authentication" icon="lock" href="/concepts/authentication">
+      Secure JWT-based authentication with token management and session handling
+    </Card>
+    <Card title="Product tracking" icon="box" href="/features/product-tracking">
+      Manage product inventory with categories, barcodes, and nutrition information
+    </Card>
+    <Card title="Expiry detection" icon="calendar-clock" href="/features/expiry-detection">
+      Automated expiry monitoring with scheduled checks and smart alerts
+    </Card>
+    <Card title="AI detection" icon="brain" href="/features/ai-detection">
+      YOLO-based object recognition for identifying food items from images
+    </Card>
+    <Card title="Barcode scanning" icon="barcode" href="/features/barcode-scanning">
+      Scan product barcodes and QR codes to quickly add items to inventory
+    </Card>
+    <Card title="Real-time notifications" icon="bell" href="/features/notifications">
+      WebSocket-based push notifications for expiry alerts and updates
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">API resources</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Complete reference for all API endpoints</p>
+
+  <CardGroup cols={3}>
+    <Card title="Authentication" icon="shield-halved" href="/api/auth/login">
+      User signup, login, and token management endpoints
+    </Card>
+    <Card title="Product inventory" icon="warehouse" href="/api/products/add">
+      Manage the global product catalog with CRUD operations
+    </Card>
+    <Card title="User inventory" icon="user" href="/api/user-inventory/add">
+      Track user-specific products with quantities and expiry dates
+    </Card>
+    <Card title="Detection" icon="camera" href="/api/detection/yolo">
+      AI-powered object detection and barcode scanning APIs
+    </Card>
+    <Card title="Notifications" icon="message" href="/api/notifications/websocket">
+      Real-time notifications via WebSocket and REST endpoints
+    </Card>
+    <Card title="Statistics" icon="chart-line" href="/api/stats/overview">
+      User statistics and analytics data
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="bg-gradient-to-r from-[#10b981] to-[#059669] dark:from-[#059669] dark:to-[#047857] rounded-2xl p-8 md:p-12">
+    <div className="max-w-3xl">
+      <h2 className="text-3xl font-semibold text-white mb-4">Ready to get started?</h2>
+      <p className="text-xl text-white/90 mb-8">
+        Follow our quickstart guide to set up your ExpireEye backend in minutes and start tracking product expiration dates with AI-powered detection.
+      </p>
+      <a 
+        href="/quickstart" 
+        className="inline-flex items-center px-6 py-3 bg-white text-[#10b981] font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+      >
+        View quickstart guide
+        <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>

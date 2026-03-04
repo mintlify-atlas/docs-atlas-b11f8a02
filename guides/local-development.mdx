@@ -1,0 +1,295 @@
+---
+title: 'Local Development'
+description: 'Set up and run the ExpireEye Backend API locally for development'
+---
+
+## Prerequisites
+
+Before you start, ensure you have the following installed:
+
+- Python 3.8 or higher
+- MySQL database server
+- pip (Python package installer)
+- Git
+
+## Initial Setup
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the ExpireEye backend repository to your local machine:
+    
+    ```bash
+    git clone <repository-url>
+    cd expire-eye-backend
+    ```
+  </Step>
+
+  <Step title="Create Virtual Environment">
+    Create and activate a Python virtual environment to isolate project dependencies:
+    
+    ```bash
+    # Create virtual environment
+    python -m venv venv
+    
+    # Activate on Linux/Mac
+    source venv/bin/activate
+    
+    # Activate on Windows
+    venv\Scripts\activate
+    ```
+    
+    <Note>
+      Always activate the virtual environment before installing packages or running the server. You'll know it's active when you see `(venv)` in your terminal prompt.
+    </Note>
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required Python packages from `requirements.txt`:
+    
+    ```bash
+    pip install -r requirements.txt
+    ```
+    
+    This installs FastAPI, uvicorn, SQLAlchemy, and other dependencies including:
+    - FastAPI for the web framework
+    - Uvicorn for the ASGI server
+    - SQLAlchemy for database ORM
+    - PyJWT for authentication
+    - OpenCV and YOLO for image detection
+    - APScheduler for scheduled tasks
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the project root by copying the example file:
+    
+    ```bash
+    cp .env.example .env
+    ```
+    
+    Update the `.env` file with your configuration:
+    
+    ```bash
+    # Database Configuration
+    DB_USER=your_db_user
+    DB_PASSWORD=your_db_password
+    DB_HOST=localhost
+    DB_PORT=3306
+    DB_NAME=expireye_db
+    
+    # JWT Secret Key
+    SECRET_KEY=your_secure_random_secret_key
+    
+    # Nutrition API (API Ninjas)
+    NUTRITION_API_KEY=your_api_ninja_nutrition_key
+    
+    # Cloudinary (for image uploads)
+    cloud_name=your_cloud_name
+    api_key=your_api_key
+    api_secret=your_api_secret
+    ```
+    
+    <Warning>
+      Never commit your `.env` file to version control. It contains sensitive credentials. The `.env.example` file is a template and should not contain real credentials.
+    </Warning>
+  </Step>
+
+  <Step title="Set Up the Database">
+    Create a MySQL database for the project:
+    
+    ```sql
+    CREATE DATABASE expireye_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+    
+    Run Alembic migrations to create tables:
+    
+    ```bash
+    alembic upgrade head
+    ```
+    
+    <Note>
+      The database connection is configured in `app/db/session.py:17` using PyMySQL as the database driver. The connection includes pool management for better performance.
+    </Note>
+  </Step>
+
+  <Step title="Create Upload Directory">
+    Create a directory for file uploads:
+    
+    ```bash
+    mkdir -p uploads
+    ```
+    
+    This directory is used by the QR code scanner and YOLO detection endpoints.
+  </Step>
+</Steps>
+
+## Running the Development Server
+
+### Using Uvicorn with Auto-Reload
+
+The recommended way to run the API during development is with uvicorn's `--reload` flag:
+
+```bash
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Command Options:**
+- `app.main:app` - Points to the FastAPI app instance in `app/main.py:31`
+- `--reload` - Automatically restarts the server when code changes are detected
+- `--host 0.0.0.0` - Makes the server accessible from other devices on your network
+- `--port 8000` - Runs the server on port 8000
+
+<Note>
+  The `--reload` flag watches for file changes and restarts the server automatically. This is perfect for development but should NOT be used in production.
+</Note>
+
+### Alternative: Running Without Reload
+
+For testing production-like behavior:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Expected Output
+
+When the server starts successfully, you should see:
+
+```
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [12345] using StatReload
+INFO:     Started server process [12346]
+INFO:     Waiting for application startup.
+Scheduler started
+INFO:     Application startup complete.
+```
+
+The "Scheduler started" message indicates the APScheduler is running for product expiry checks (see `app/main.py:175`).
+
+## Interactive API Documentation
+
+FastAPI automatically generates interactive API documentation that you can use to test endpoints during development.
+
+### Swagger UI (`/docs`)
+
+Access the Swagger UI at: **http://localhost:8000/api/docs**
+
+<Note>
+  The API has a root path of `/api` configured in `app/main.py:31`, so all endpoints are prefixed with `/api`.
+</Note>
+
+**Features:**
+- Interactive interface to test all API endpoints
+- Automatic request/response schema validation
+- Built-in authentication support (click "Authorize" to add Bearer token)
+- "Try it out" buttons to execute requests directly from the browser
+
+**Using Authentication in Swagger:**
+1. First, call the `POST /api/auth/login` or `POST /api/auth/signup` endpoint
+2. Copy the `token` from the response
+3. Click the "Authorize" button at the top right
+4. Enter `Bearer <your-token>` in the "Value" field
+5. Click "Authorize" - now all requests will include the auth header
+
+### ReDoc (`/redoc`)
+
+Access the ReDoc documentation at: **http://localhost:8000/api/redoc**
+
+**Features:**
+- Clean, three-panel design
+- Better for browsing and reading API structure
+- Searchable endpoint list
+- Detailed schema documentation
+
+<Note>
+  Both `/docs` and `/redoc` are public paths (see `app/main.py:58-65`) and don't require authentication. All other endpoints require a valid Bearer token in the Authorization header.
+</Note>
+
+## Development Workflow
+
+### Hot Reloading
+
+When running with `--reload`, the server automatically restarts when you:
+- Modify Python files (`.py`)
+- Add or remove files in the project
+- Change imported modules
+
+**Files watched:** All Python files in the `app/` directory and subdirectories
+
+### Common Development Tasks
+
+**Adding a New Endpoint:**
+1. Create or modify a router file in `app/routers/`
+2. Define your endpoint function with appropriate decorators
+3. Import and include the router in `app/main.py` (see lines 162-168)
+4. Save the file - the server will auto-reload
+5. Check the `/docs` page to see your new endpoint
+
+**Modifying Database Models:**
+1. Update the model in `app/models/`
+2. Generate a migration: `alembic revision --autogenerate -m "Description"`
+3. Review the generated migration in `alembic/versions/`
+4. Apply the migration: `alembic upgrade head`
+
+**Testing Scheduled Jobs:**
+
+The application uses APScheduler for periodic tasks. The product expiry check runs every 10 seconds in development (`app/main.py:173`):
+
+```python
+scheduler.add_job(check_product_expiry, CronTrigger(second="*/10"))
+```
+
+Monitor the console output to see when scheduled jobs execute.
+
+## CORS Configuration
+
+The API is configured with CORS middleware to allow requests from specific origins (`app/main.py:34-48`):
+
+```python
+origins = [
+    "http://localhost:5173",      # Local Vite dev server
+    "http://127.0.0.1:5173",      # Alternative local address
+    "https://expire-eye.vercel.app",  # Production frontend
+]
+```
+
+**Adding Development Origins:**
+
+If you need to access the API from a different origin during development, add it to the `origins` list in `app/main.py:34`.
+
+## Troubleshooting Development Issues
+
+### Port Already in Use
+
+If port 8000 is already taken:
+
+```bash
+# Use a different port
+uvicorn app.main:app --reload --port 8080
+```
+
+### Module Import Errors
+
+If you see import errors after adding dependencies:
+
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+
+# Reinstall requirements
+pip install -r requirements.txt
+```
+
+### Database Connection Issues
+
+See the [Troubleshooting guide](/guides/troubleshooting#database-connection-errors) for database-specific issues.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing" icon="vial" href="/guides/testing">
+    Learn how to test your API using the interactive documentation
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/guides/troubleshooting">
+    Common issues and their solutions
+  </Card>
+</CardGroup>

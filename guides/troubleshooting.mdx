@@ -1,0 +1,762 @@
+---
+title: 'Troubleshooting'
+description: 'Common issues and solutions for the ExpireEye Backend API'
+---
+
+## Overview
+
+This guide covers common issues you might encounter when developing or deploying the ExpireEye Backend API, along with their solutions.
+
+## Database Connection Errors
+
+### Connection Refused
+
+<Accordion title="Error: Can't connect to MySQL server on 'localhost'">
+  **Symptom:**
+  ```
+  sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) 
+  (2003, "Can't connect to MySQL server on 'localhost' ([Errno 111] Connection refused)")
+  ```
+  
+  **Causes:**
+  - MySQL server is not running
+  - Wrong host/port in configuration
+  - Firewall blocking connection
+  
+  **Solutions:**
+  
+  1. **Verify MySQL is running:**
+     ```bash
+     # Linux
+     sudo systemctl status mysql
+     sudo systemctl start mysql
+     
+     # macOS (with Homebrew)
+     brew services list
+     brew services start mysql
+     
+     # Windows
+     # Check Services app for MySQL service
+     ```
+  
+  2. **Check connection details in `.env`:**
+     ```bash
+     DB_HOST=localhost  # or 127.0.0.1
+     DB_PORT=3306       # default MySQL port
+     DB_USER=your_username
+     DB_PASSWORD=your_password
+     DB_NAME=expireye_db
+     ```
+  
+  3. **Test connection manually:**
+     ```bash
+     mysql -h localhost -P 3306 -u your_username -p
+     ```
+  
+  4. **Check if port 3306 is open:**
+     ```bash
+     netstat -an | grep 3306
+     ```
+  
+  <Note>
+    The database configuration is in `app/db/session.py:11-17`. Make sure all environment variables are set correctly.
+  </Note>
+</Accordion>
+
+### Authentication Failed
+
+<Accordion title="Error: Access denied for user">
+  **Symptom:**
+  ```
+  sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) 
+  (1045, "Access denied for user 'username'@'localhost' (using password: YES)")
+  ```
+  
+  **Causes:**
+  - Incorrect username or password
+  - User doesn't have access to the database
+  - Password contains special characters not properly escaped
+  
+  **Solutions:**
+  
+  1. **Verify credentials:**
+     ```bash
+     mysql -u your_username -p
+     # Enter password when prompted
+     ```
+  
+  2. **Grant proper permissions:**
+     ```sql
+     -- As MySQL root user
+     GRANT ALL PRIVILEGES ON expireye_db.* TO 'your_username'@'localhost';
+     FLUSH PRIVILEGES;
+     ```
+  
+  3. **If password has special characters:**
+     ```python
+     # The code uses urllib.parse for escaping if needed
+     # Ensure your password in .env is the raw password
+     DB_PASSWORD=p@ssw0rd!123  # This will be handled correctly
+     ```
+  
+  4. **Reset user password:**
+     ```sql
+     ALTER USER 'your_username'@'localhost' IDENTIFIED BY 'new_password';
+     FLUSH PRIVILEGES;
+     ```
+</Accordion>
+
+### Database Does Not Exist
+
+<Accordion title="Error: Unknown database">
+  **Symptom:**
+  ```
+  sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) 
+  (1049, "Unknown database 'expireye_db'")
+  ```
+  
+  **Solution:**
+  
+  Create the database:
+  ```sql
+  CREATE DATABASE expireye_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  ```
+  
+  Then run migrations:
+  ```bash
+  alembic upgrade head
+  ```
+</Accordion>
+
+### Connection Pool Timeout
+
+<Accordion title="Error: Connection pool timeout / Too many connections">
+  **Symptom:**
+  ```
+  QueuePool limit of size 10 overflow 5 reached
+  ```
+  
+  **Causes:**
+  - Not closing database sessions properly
+  - Too many concurrent requests
+  - Database connection leaks
+  
+  **Solutions:**
+  
+  1. **The connection pool is configured in `app/db/session.py:24-31`:**
+     ```python
+     engine = create_engine(
+         DATABASE_URL,
+         pool_pre_ping=True,      # Check connection health
+         pool_recycle=3600,       # Recycle every hour
+         pool_size=10,            # Max 10 connections
+         max_overflow=5,          # Allow 5 extra connections
+     )
+     ```
+  
+  2. **Increase pool size if needed:**
+     ```python
+     pool_size=20,
+     max_overflow=10,
+     ```
+  
+  3. **Ensure sessions are properly closed:**
+     The `get_db()` dependency handles this automatically (`app/db/session.py:37-42`).
+  
+  4. **Monitor active connections:**
+     ```sql
+     SHOW PROCESSLIST;
+     ```
+</Accordion>
+
+## Authentication Errors
+
+### Missing Authorization Header
+
+<Accordion title="Error: Authorization header missing or invalid">
+  **Symptom:**
+  ```json
+  {
+    "detail": "Authorization header missing or invalid."
+  }
+  ```
+  
+  **Status Code:** 401 Unauthorized
+  
+  **Causes:**
+  - No Authorization header in request
+  - Header name is incorrect (case-sensitive)
+  - Using wrong authentication method
+  
+  **Solutions:**
+  
+  1. **Include Authorization header in all requests:**
+     ```bash
+     curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8000/api/endpoint
+     ```
+  
+  2. **In Swagger UI:**
+     - Click "Authorize" button
+     - Enter: `Bearer YOUR_TOKEN`
+     - Click "Authorize"
+  
+  3. **In JavaScript/Frontend:**
+     ```javascript
+     fetch('http://localhost:8000/api/endpoint', {
+       headers: {
+         'Authorization': `Bearer ${token}`
+       }
+     })
+     ```
+  
+  4. **Verify the header format:**
+     Must be: `Authorization: Bearer <token>`
+     - Note the space after "Bearer"
+     - Case-sensitive header name
+  
+  <Note>
+    The middleware checks for the Authorization header in `app/main.py:72-78`. Public paths like `/api/auth/login`, `/docs`, and `/status` are exempt.
+  </Note>
+</Accordion>
+
+### Invalid or Expired Token
+
+<Accordion title="Error: Access token is invalid">
+  **Symptom:**
+  ```json
+  {
+    "detail": "Access token is invalid."
+  }
+  ```
+  
+  **Status Code:** 401 Unauthorized
+  
+  **Causes:**
+  - Token has expired (4000 minutes after creation)
+  - Token is malformed or corrupted
+  - Secret key changed since token was issued
+  - Token was decoded with wrong algorithm
+  
+  **Solutions:**
+  
+  1. **Get a new token by logging in again:**
+     ```bash
+     curl -X POST http://localhost:8000/api/auth/login \
+       -H "Content-Type: application/json" \
+       -d '{"email":"your@email.com","password":"yourpassword"}'
+     ```
+  
+  2. **Check token expiration:**
+     Tokens expire after 4000 minutes (configured in `app/utils/jwt.py:9`).
+     Decode your token at [jwt.io](https://jwt.io) to check the `exp` claim.
+  
+  3. **Verify SECRET_KEY hasn't changed:**
+     ```bash
+     # Check .env file
+     cat .env | grep SECRET_KEY
+     ```
+     
+     If you changed the SECRET_KEY, all existing tokens are invalidated.
+  
+  4. **Ensure token is properly formatted:**
+     - Should start with "Bearer "
+     - Three parts separated by dots: `xxx.yyy.zzz`
+     - No extra whitespace or line breaks
+  
+  <Warning>
+    Token validation happens in `app/main.py:86-93` and uses the JWT decode function from `app/utils/jwt.py:20-27`.
+  </Warning>
+</Accordion>
+
+### Invalid Login Credentials
+
+<Accordion title="Error: Invalid email or password">
+  **Symptom:**
+  ```json
+  {
+    "detail": "Invalid email or password"
+  }
+  ```
+  
+  **Status Code:** 401 Unauthorized
+  
+  **Solutions:**
+  
+  1. **Verify email exists:**
+     Check the database directly:
+     ```sql
+     SELECT email FROM user WHERE email = 'your@email.com';
+     ```
+  
+  2. **Reset password if forgotten:**
+     Update password in database (hash it first):
+     ```python
+     import bcrypt
+     new_password = "newpassword123"
+     hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+     print(hashed.decode('utf-8'))
+     ```
+     
+     Then update in database:
+     ```sql
+     UPDATE user SET password = 'HASHED_PASSWORD' WHERE email = 'your@email.com';
+     ```
+  
+  3. **Check for typos:**
+     - Email addresses are case-sensitive
+     - Remove leading/trailing spaces
+  
+  <Note>
+    Password verification uses bcrypt in `app/routers/auth.py:31-32`. The password is compared against the hashed version stored in the database.
+  </Note>
+</Accordion>
+
+## CORS Errors
+
+### Cross-Origin Request Blocked
+
+<Accordion title="Error: CORS policy blocked the request">
+  **Symptom (Browser Console):**
+  ```
+  Access to fetch at 'http://localhost:8000/api/...' from origin 'http://localhost:3000' 
+  has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present
+  ```
+  
+  **Causes:**
+  - Frontend origin not in allowed list
+  - Preflight request failing
+  - Missing CORS middleware configuration
+  
+  **Solutions:**
+  
+  1. **Add your frontend origin to the allowed list:**
+     
+     Edit `app/main.py:34-39`:
+     ```python
+     origins = [
+         "http://localhost:5173",
+         "http://127.0.0.1:5173",
+         "http://localhost:3000",  # Add your origin
+         "https://expire-eye.vercel.app",
+     ]
+     ```
+  
+  2. **For development, temporarily allow all origins:**
+     ```python
+     allow_origins=["*"],  # Only for development!
+     ```
+  
+  3. **Verify CORS middleware is configured:**
+     Check `app/main.py:42-48` - should include CORSMiddleware.
+  
+  4. **Ensure credentials are allowed:**
+     ```python
+     allow_credentials=True,  # Required for cookies/auth
+     ```
+  
+  5. **Check preflight requests:**
+     The middleware handles OPTIONS requests (`app/main.py:55-56`).
+  
+  <Warning>
+    Never use `allow_origins=["*"]` in production! Always specify exact origins.
+  </Warning>
+</Accordion>
+
+### Credentials Not Sent
+
+<Accordion title="Cookies not being sent cross-origin">
+  **Symptom:**
+  Access token cookie is not included in cross-origin requests.
+  
+  **Solution:**
+  
+  1. **Backend: Ensure CORS allows credentials:**
+     ```python
+     allow_credentials=True,
+     ```
+  
+  2. **Frontend: Include credentials in fetch:**
+     ```javascript
+     fetch('http://localhost:8000/api/endpoint', {
+       credentials: 'include'
+     })
+     ```
+  
+  3. **Use Authorization header instead:**
+     The API primarily uses Authorization headers, not cookies (`app/main.py:72`).
+</Accordion>
+
+## File Upload Errors
+
+### File Too Large
+
+<Accordion title="Error: Request entity too large">
+  **Symptom:**
+  ```
+  413 Request Entity Too Large
+  ```
+  
+  **Causes:**
+  - File exceeds FastAPI's default limit
+  - Reverse proxy (nginx) limiting request size
+  
+  **Solutions:**
+  
+  1. **For uvicorn, no default limit, but add one if needed:**
+     ```python
+     # In app/main.py
+     app = FastAPI(
+         root_path="/api",
+         # Add max request size (e.g., 10MB)
+     )
+     ```
+  
+  2. **If using nginx, update config:**
+     ```nginx
+     client_max_body_size 10M;
+     ```
+  
+  3. **Validate file size before upload:**
+     ```python
+     @router.post("/upload")
+     async def upload(file: UploadFile):
+         contents = await file.read()
+         if len(contents) > 10 * 1024 * 1024:  # 10MB
+             raise HTTPException(400, "File too large")
+     ```
+</Accordion>
+
+### Invalid File Type
+
+<Accordion title="Error: Cannot process file / Image decode error">
+  **Symptom:**
+  ```
+  OpenCV Error: Can't decode image
+  ```
+  or
+  ```
+  500 Internal Server Error
+  ```
+  
+  **Causes:**
+  - Uploaded file is not a valid image
+  - Image format not supported by OpenCV
+  - File is corrupted
+  
+  **Solutions:**
+  
+  1. **Validate file type before processing:**
+     ```python
+     ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp'}
+     
+     file_ext = os.path.splitext(file.filename)[1].lower()
+     if file_ext not in ALLOWED_EXTENSIONS:
+         raise HTTPException(400, f"File type {file_ext} not supported")
+     ```
+  
+  2. **Check file content type:**
+     ```python
+     if not file.content_type.startswith('image/'):
+         raise HTTPException(400, "Only image files allowed")
+     ```
+  
+  3. **Supported formats for YOLO/QR detection:**
+     - JPEG (.jpg, .jpeg)
+     - PNG (.png)
+     - BMP (.bmp)
+  
+  <Note>
+    The QR code endpoint saves files to `uploads/` directory (`app/main.py:136-143`). Ensure this directory exists and has write permissions.
+  </Note>
+</Accordion>
+
+### Upload Directory Missing
+
+<Accordion title="Error: No such file or directory: 'uploads/'">
+  **Symptom:**
+  ```
+  FileNotFoundError: [Errno 2] No such file or directory: 'uploads/filename.jpg'
+  ```
+  
+  **Solution:**
+  
+  Create the uploads directory:
+  ```bash
+  mkdir -p uploads
+  ```
+  
+  Or add to your startup script:
+  ```python
+  import os
+  
+  @app.on_event("startup")
+  async def create_upload_dir():
+      os.makedirs("uploads", exist_ok=True)
+  ```
+</Accordion>
+
+## Validation Errors
+
+### Missing Required Fields
+
+<Accordion title="Error: Field required">
+  **Symptom:**
+  ```json
+  {
+    "errors": [
+      {
+        "field": "email",
+        "message": "This field is required."
+      }
+    ]
+  }
+  ```
+  
+  **Status Code:** 422 Unprocessable Entity
+  
+  **Causes:**
+  - Request body missing required fields
+  - Field name misspelled
+  - Sending wrong data type
+  
+  **Solutions:**
+  
+  1. **Check the API schema in `/docs`:**
+     Each endpoint shows required fields marked with an asterisk (*)
+  
+  2. **Ensure all required fields are included:**
+     ```json
+     // For signup - all fields required
+     {
+       "name": "John Doe",
+       "email": "john@example.com",
+       "password": "securepass123",
+       "dob": "1990-01-01"
+     }
+     ```
+  
+  3. **Check field names match exactly:**
+     Field names are case-sensitive: `email` not `Email`
+  
+  <Note>
+    Custom validation error handler is in `app/main.py:99-115`. It formats Pydantic validation errors into a more user-friendly format.
+  </Note>
+</Accordion>
+
+### Invalid Data Format
+
+<Accordion title="Error: Invalid date format / Value is not a valid email">
+  **Symptom:**
+  ```json
+  {
+    "errors": [
+      {
+        "field": "dob",
+        "message": "invalid date format"
+      }
+    ]
+  }
+  ```
+  
+  **Solutions:**
+  
+  1. **Use correct date format (ISO 8601):**
+     ```json
+     {
+       "dob": "1990-01-01"  // YYYY-MM-DD
+     }
+     ```
+  
+  2. **Ensure email is valid:**
+     ```json
+     {
+       "email": "user@example.com"  // Must have @ and domain
+     }
+     ```
+  
+  3. **Check data types:**
+     - Numbers should not be strings: `"quantity": 5` not `"quantity": "5"`
+     - Booleans: `true` or `false` (lowercase, no quotes)
+     - Arrays: `[1, 2, 3]` not `"1,2,3"`
+</Accordion>
+
+## Scheduler Issues
+
+### Scheduler Not Running
+
+<Accordion title="Scheduled jobs not executing">
+  **Symptom:**
+  Product expiry checks not running, no "Scheduler started" message in logs.
+  
+  **Causes:**
+  - Application not fully started
+  - Scheduler exception during initialization
+  - Event loop issues
+  
+  **Solutions:**
+  
+  1. **Check startup logs:**
+     ```bash
+     uvicorn app.main:app --reload
+     ```
+     
+     Look for:
+     ```
+     Scheduler started
+     ```
+  
+  2. **Verify scheduler configuration:**
+     Check `app/main.py:171-175`:
+     ```python
+     @app.on_event("startup")
+     async def startup_event():
+         scheduler.add_job(check_product_expiry, CronTrigger(second="*/10"))
+         scheduler.start()
+     ```
+  
+  3. **Check for errors in scheduled function:**
+     Add error handling to `check_product_expiry` function.
+  
+  4. **Ensure APScheduler is installed:**
+     ```bash
+     pip install APScheduler==3.11.0
+     ```
+  
+  5. **Monitor scheduler execution:**
+     Add logging to see when jobs run:
+     ```python
+     import logging
+     logging.basicConfig(level=logging.INFO)
+     ```
+</Accordion>
+
+### Jobs Running Too Frequently
+
+<Accordion title="Scheduled jobs executing multiple times">
+  **Symptom:**
+  Jobs running more than expected, duplicate notifications.
+  
+  **Causes:**
+  - Multiple server instances running
+  - Scheduler not properly shut down
+  - `--reload` creating duplicate processes
+  
+  **Solutions:**
+  
+  1. **Check for multiple processes:**
+     ```bash
+     ps aux | grep uvicorn
+     ```
+     
+     Kill duplicates:
+     ```bash
+     pkill -f uvicorn
+     ```
+  
+  2. **Ensure proper shutdown:**
+     The shutdown event handler stops the scheduler (`app/main.py:178-180`):
+     ```python
+     @app.on_event("shutdown")
+     async def shutdown_event():
+         scheduler.shutdown()
+     ```
+  
+  3. **For production, use a single worker:**
+     ```bash
+     uvicorn app.main:app --workers 1
+     ```
+     
+     Or use a distributed job queue (Celery, RQ) for multi-worker setups.
+</Accordion>
+
+## Environment and Configuration
+
+### Environment Variables Not Loaded
+
+<Accordion title="Error: SECRET_KEY is None">
+  **Symptom:**
+  ```
+  TypeError: 'NoneType' object is not subscriptable
+  ```
+  or JWT operations failing
+  
+  **Causes:**
+  - `.env` file not in project root
+  - Environment variables not loaded
+  - Typo in variable names
+  
+  **Solutions:**
+  
+  1. **Verify `.env` file location:**
+     ```bash
+     ls -la .env
+     ```
+     Should be in the same directory as `app/` folder.
+  
+  2. **Check `.env` file contents:**
+     ```bash
+     cat .env
+     ```
+     
+     Required variables:
+     - `DB_USER`
+     - `DB_PASSWORD`
+     - `DB_HOST`
+     - `DB_PORT`
+     - `DB_NAME`
+     - `SECRET_KEY`
+  
+  3. **Ensure python-dotenv is installed:**
+     ```bash
+     pip install python-dotenv
+     ```
+  
+  4. **Check for typos in variable names:**
+     Variable names in `.env` must match exactly what's used in code:
+     - `app/db/session.py:11-15`
+     - `app/utils/jwt.py:8`
+  
+  5. **Load environment variables manually for testing:**
+     ```python
+     from dotenv import load_dotenv
+     import os
+     
+     load_dotenv()
+     print(os.getenv("SECRET_KEY"))  # Should print your secret key
+     ```
+</Accordion>
+
+## Getting Help
+
+If you're still experiencing issues:
+
+1. **Check the logs:**
+   ```bash
+   uvicorn app.main:app --reload --log-level debug
+   ```
+
+2. **Enable SQLAlchemy query logging:**
+   ```python
+   # In app/db/session.py:24
+   engine = create_engine(DATABASE_URL, echo=True)  # Shows all SQL queries
+   ```
+
+3. **Test with minimal example:**
+   Create a simple test endpoint to isolate the issue:
+   ```python
+   @app.get("/test")
+   def test():
+       return {"status": "ok"}
+   ```
+
+4. **Review error stack traces:**
+   FastAPI provides detailed error messages in development mode.
+
+<CardGroup cols={2}>
+  <Card title="Local Development" icon="laptop-code" href="/guides/local-development">
+    Set up your development environment
+  </Card>
+  <Card title="Testing" icon="vial" href="/guides/testing">
+    Test your API endpoints
+  </Card>
+</CardGroup>
